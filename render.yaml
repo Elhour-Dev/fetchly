@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: fetchly
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: FETCHLY_USERNAME
+        value: fetchly
+      - key: FETCHLY_PASSWORD
+        sync: false
+      - key: YOUTUBE_COOKIES_B64
+        sync: false

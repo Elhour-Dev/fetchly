@@ -1,0 +1,27 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+
+# Local environment
+.venv/
+venv/
+.env
+
+# Generated downloads
+downloads/*
+!downloads/.gitkeep
+
+# Secrets and local build artifacts
+cookies.txt
+vendor_check/
+.vendor/
+_pkgcheck/
+._pkgcheck/
+dist/
+build/
+build-*/
+mobile/
+desktop_app.py
+testfile.txt
+testdir/
+pytestdir/
