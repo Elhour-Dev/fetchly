@@ -100,8 +100,13 @@ object Tools {
 
     /** True when the tools are more than 7 days old (never updated: counted from when the app was installed or updated). */
     fun updateOld(ctx: Context): Boolean {
-        val installed = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime } catch (_: Exception) { System.currentTimeMillis() }
-        val last = maxOf(prefs(ctx).getLong("last_update", 0), installed)
+        // The bundled yt-dlp can already be old on a fresh install, so go by its own release date (e.g. 2025.11.12).
+        val built = try {
+            java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.US).parse(version(ctx).take(10))?.time   // call off the UI thread
+        } catch (_: Exception) { null } ?: 0L
+        val installed = if (built > 0) 0L else
+            try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime } catch (_: Exception) { System.currentTimeMillis() }
+        val last = maxOf(prefs(ctx).getLong("last_update", 0), built, installed)
         return System.currentTimeMillis() - last > WEEK
     }
 }

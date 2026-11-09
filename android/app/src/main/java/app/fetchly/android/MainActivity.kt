@@ -145,7 +145,11 @@ class MainActivity : Activity() {
             try {
                 Tools.init(this)
                 ready = true
+                // Once per app start: offer an update if the tools are old. It only updates after a tap.
+                val offer = !State.startupChecked && Tools.updateOld(this) && !Tools.updateSnoozed(this)
+                State.startupChecked = true
                 runOnUiThread {
+                    if (offer) showUpdateDialog(false) { startDownload() }
                     if (pendingStart) { pendingStart = false; State.phase = State.Phase.IDLE; State.text = ""; startDownload() } else { if (State.phase == State.Phase.IDLE) State.text = ""; render() }
                     loadQualities()
                 }
@@ -155,13 +159,6 @@ class MainActivity : Activity() {
             }
         }
         handleIntent(intent)
-
-        // Once per app start: offer an update if the tools are old. It only updates after a tap.
-        if (!State.startupChecked) {
-            State.startupChecked = true
-            if (Tools.updateOld(this) && !Tools.updateSnoozed(this))
-                scroll.post { showUpdateDialog(false) { startDownload() } }
-        }
     }
 
     override fun onNewIntent(intent: Intent) {
