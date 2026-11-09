@@ -91,7 +91,11 @@ object Tools {
     /** Errors that updating yt-dlp may fix (ids from Help). */
     val updateTopics = setOf("g_update", "g_format", "g_unsupported")
 
-    fun updateSnoozed(ctx: Context) = System.currentTimeMillis() < prefs(ctx).getLong("update_snooze_until", 0)
+    /** No pop-up after "Later", and none for 24 hours after an update (a newer yt-dlp may not fix this error). */
+    fun updateSnoozed(ctx: Context): Boolean {
+        val now = System.currentTimeMillis()
+        return now < prefs(ctx).getLong("update_snooze_until", 0) || now - prefs(ctx).getLong("last_update", 0) < DAY
+    }
     fun snoozeUpdate(ctx: Context) { prefs(ctx).edit().putLong("update_snooze_until", System.currentTimeMillis() + DAY).apply() }
 
     /** True when the tools are more than 7 days old (never updated: counted from when the app was installed or updated). */

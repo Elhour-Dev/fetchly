@@ -152,8 +152,14 @@ class LoginActivity : Activity() {
     private fun done() {
         val lines = Cookies.fromWebView(hosts, base)
         log("Done tapped, cookies: " + Cookies.names(lines))
-        if (!Cookies.hasSession(lines, base)) {
+        if (lines.isEmpty()) {
             Toast.makeText(this, "No login found yet. Log in first, then tap Done.", Toast.LENGTH_LONG).show(); return
+        }
+        if (!Cookies.hasSession(lines, base)) {
+            // No login, but the site gave this browser its normal visitor cookies. They can be enough for a public link,
+            // so keep them and try again. If it fails, Fetchly says login is still needed.
+            Toast.makeText(this, "No login found. Saved the site's visitor cookies; trying again.", Toast.LENGTH_LONG).show()
+            save(lines, null); return
         }
         save(lines, Cookies.sessionNames(base))
     }

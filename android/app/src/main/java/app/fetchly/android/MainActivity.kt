@@ -376,7 +376,10 @@ class MainActivity : Activity() {
         val uri = data?.data ?: return
         val err = Cookies.import(this, uri)
         if (err == null) State.cookiesSaved = true
-        Toast.makeText(this, err ?: "Cookies imported.", Toast.LENGTH_LONG).show()
+        val base = Cookies.baseDomain(Cookies.hostOf(State.failedUrl))
+        val noLogin = err == null && Cookies.sessionNames(base) != null && !Cookies.savedHasSession(this, base)
+        Toast.makeText(this, err ?: if (noLogin) "Imported, but this file has no login cookie for $base. Export it again while logged in."
+            else "Cookies imported.", Toast.LENGTH_LONG).show()
         render()
     }
 }
