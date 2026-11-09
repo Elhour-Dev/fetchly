@@ -22,7 +22,7 @@ object Help {
             "YouTube asks you to sign in to prove you are not a bot.",
             "YouTube blocks requests it does not trust. VPNs and busy networks make it worse.",
             listOf(
-                "If a VPN or proxy is on, turn it off. Or set it to \"direct\" for Fetchly.",
+                "If a VPN or proxy is on, turn it off. Or set it to \"direct\" for Fetchy.",
                 "Tap \"Log in\". If Google says the app is not allowed, tap \"Import cookies.txt\" instead.",
                 "For the file: log in to YouTube on a computer, export cookies.txt with a cookies extension, and copy it to your phone's Downloads.",
                 "Tap \"Retry\"."
@@ -33,7 +33,7 @@ object Help {
             "\"Video unavailable\", \"Private video\" or \"not available in your country\".",
             "The owner hid or removed it, it is blocked where you are, or it needs a logged-in adult.",
             listOf(
-                "Open the link in your phone browser. If it does not play there, Fetchly cannot get it.",
+                "Open the link in your phone browser. If it does not play there, Fetchy cannot get it.",
                 "Age limit: tap \"Log in\" or \"Import cookies.txt\" with an adult account, then \"Retry\".",
                 "Blocked in your country: a VPN may help, but it can also trigger the bot check.",
                 "Removed or private: only the owner can fix that."
@@ -67,7 +67,7 @@ object Help {
             "\"This content is not available\", \"private\" or \"deleted\".",
             "The owner made it private or deleted it.",
             listOf(
-                "Open the link in your phone browser. If you cannot see it there, Fetchly cannot either.",
+                "Open the link in your phone browser. If you cannot see it there, Fetchy cannot either.",
                 "Private: log in with an account that may see it (tap \"Log in\"), then \"Retry\".",
                 "Deleted: it is gone for good."
             ), login = true, site = "instagram")
@@ -75,26 +75,26 @@ object Help {
 
     private val general = HelpCard("general", "General", "Sound, speed, links, tools, files", false, listOf(
         Problem("g_unsupported", "Link not supported",
-            "This link is not a video Fetchly can download.",
+            "This link is not a video Fetchy can download.",
             r("unsupported url|not supported|no video|videos only|could not find|no media|not a valid|invalid url|no supported"),
             "\"Unsupported URL\" or \"No video found\".",
             "The link is not a video page, is cut off, or the site is not supported.",
             listOf(
                 "Copy the link of the video itself. Use the video's Share button.",
                 "Paste the whole link. It starts with https://",
-                "Photos do not work. Fetchly downloads videos.",
+                "Photos do not work. Fetchy downloads videos.",
                 "Open Settings, tap \"Update tools\", then try again."
             )),
         Problem("g_ffmpeg", "No sound, or ffmpeg missing",
             "The video and sound could not be joined.",
             r("ffmpeg|ffprobe|postprocess|merg(e|ing)|no audio|no sound"),
             "The video has no sound, or an error names ffmpeg.",
-            "Many sites keep video and sound apart. Fetchly joins them with ffmpeg.",
+            "Many sites keep video and sound apart. Fetchy joins them with ffmpeg.",
             listOf(
                 "Tap \"Retry\".",
                 "Free some storage space on your phone.",
                 "Open Settings and tap \"Update tools\".",
-                "Still broken? Reinstall Fetchly."
+                "Still broken? Reinstall Fetchy."
             )),
         Problem("g_network", "Slow or failed download",
             "The connection failed or timed out.",
@@ -121,7 +121,7 @@ object Help {
             "No matching video format was found.",
             r("format.{0,20}(is )?not available|requested format|no such format|no formats"),
             "\"Requested format is not available\".",
-            "The site gave no video and sound mix that Fetchly can use. Often it needs a login.",
+            "The site gave no video and sound mix that Fetchy can use. Often it needs a login.",
             listOf(
                 "Open Settings and tap \"Update tools\".",
                 "Log in or import cookies (see the Instagram or YouTube card).",
@@ -130,11 +130,11 @@ object Help {
         Problem("g_storage", "File not found in Downloads",
             "", null,
             "The box says Done, but you cannot find the video.",
-            "Fetchly saves finished videos in your phone's Downloads folder.",
+            "Fetchy saves finished videos in your phone's Downloads folder.",
             listOf(
                 "Open the Files (or My Files) app, then Downloads.",
                 "Look for the name shown in the green box.",
-                "Android 13 and newer: allow Notifications for Fetchly to see progress. Downloads work without it."
+                "Android 13 and newer: allow Notifications for Fetchy to see progress. Downloads work without it."
             ))
     ))
 

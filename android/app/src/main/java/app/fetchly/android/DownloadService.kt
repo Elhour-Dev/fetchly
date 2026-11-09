@@ -22,6 +22,7 @@ class DownloadService : Service() {
         const val EXTRA_URL = "url"
         const val EXTRA_FORMAT = "format"   // yt-dlp format selector from the quality picker (null = Best)
         const val EXTRA_AUDIO = "audio"     // true = extract MP3
+        const val EXTRA_USE_INFO = "use_info" // true = reuse the video info saved by the quality picker
         const val ACTION_CANCEL = "cancel"
         private const val PID = "fetchly-download"
         private const val CHANNEL = "downloads"
@@ -54,23 +55,28 @@ class DownloadService : Service() {
         State.phase = State.Phase.RUNNING
         State.percent = 0
         State.failedUrl = url
-        State.text = "Getting ready…"
+        State.stage = State.Stage.FETCH
+        State.failedStage = null
+        State.text = "Fetching video info…"
         State.changed()
         val format = intent.getStringExtra(EXTRA_FORMAT) ?: Quality.BEST
         val audio = intent.getBooleanExtra(EXTRA_AUDIO, false)
-        thread { work(url, format, audio) }
+        val useInfo = intent.getBooleanExtra(EXTRA_USE_INFO, false)
+        thread { work(url, format, audio, useInfo) }
         return START_NOT_STICKY
     }
 
-    private fun work(url: String, format: String, audio: Boolean) {
+    private fun work(url: String, format: String, audio: Boolean, useInfo: Boolean) {
         val dir = File(cacheDir, "job")
         try {
             dir.deleteRecursively(); dir.mkdirs()
             Tools.init(this)
-            val req = YoutubeDLRequest(url).apply {
+            fun request(fmt: String, aud: Boolean, info: File? = null) =
+                (if (info != null) YoutubeDLRequest(emptyList()).apply { addOption("--load-info-json", info.absolutePath) }
+                else YoutubeDLRequest(url)).apply {
                 addOption("--no-playlist")
-                addOption("-f", format)
-                if (audio) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
+                addOption("-f", fmt)
+                if (aud) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
                 else addOption("--merge-output-format", "mp4")
                 addOption("--no-mtime")
                 addOption("--trim-filenames", "120")
@@ -79,22 +85,56 @@ class DownloadService : Service() {
                 if (c.exists()) addOption("--cookies", c.absolutePath)
             }
             var last = -1
-            YoutubeDL.getInstance().execute(req, PID) { p, _, _ ->
-                val pct = if (p < 0) 0 else p.toInt().coerceIn(0, 100)
-                if (pct != last) {
-                    last = pct
-                    State.percent = pct
-                    State.text = "Downloading… $pct%"
-                    State.changed()
-                    notify(notif("Downloading… $pct%", pct, false))
+            val progress: (Float, Long, String?) -> Unit = { p, _, line ->
+                val l = line ?: ""
+                if (l.contains("[Merger]") || l.contains("[ExtractAudio]") || l.contains("[VideoRemuxer]") || l.contains("[ffmpeg]")) {
+                    if (State.stage != State.Stage.FINISH) {
+                        State.stage = State.Stage.FINISH; State.percent = 100
+                        State.text = "Finishing up…"; State.changed()
+                        notify(notif("Finishing up…", 0, true))
+                    }
+                } else if (State.stage != State.Stage.FINISH && p >= 0) {
+                    val pct = p.toInt().coerceIn(0, 100)
+                    if (State.stage != State.Stage.DOWNLOAD || pct != last) {
+                        last = pct
+                        State.stage = State.Stage.DOWNLOAD   // the real download has started
+                        State.percent = pct
+                        State.text = "Downloading… $pct%"
+                        State.changed()
+                        notify(notif("Downloading… $pct%", pct, false))
+                    }
                 }
+            }
+            // Use the answer saved by the quality picker, so the site is not asked twice. If that fails, ask normally.
+            val info = if (useInfo) Quality.infoFile(this).takeIf { it.exists() } else null
+            fun run(fmt: String, aud: Boolean) {
+                if (info != null) {
+                    try { YoutubeDL.getInstance().execute(request(fmt, aud, info), PID, progress); return }
+                    catch (e: Exception) {
+                        if (cancelled) throw e
+                        dir.deleteRecursively(); dir.mkdirs(); State.stage = State.Stage.FETCH; State.percent = 0; last = -1
+                    }
+                }
+                YoutubeDL.getInstance().execute(request(fmt, aud), PID, progress)
+            }
+            try {
+                run(format, audio)
+            } catch (e: Exception) {
+                // The chosen quality is not available for this video: use Best instead of failing.
+                val raw = e.message ?: ""
+                if (cancelled || audio || format == Quality.BEST || Help.find(raw, url)?.id != "g_format") throw e
+                dir.deleteRecursively(); dir.mkdirs()
+                State.stage = State.Stage.FETCH; State.percent = 0; last = -1
+                State.text = "That quality is not available. Trying the best quality…"; State.changed()
+                run(Quality.BEST, false)
             }
             if (cancelled) throw IllegalStateException("Cancelled")
             val file = dir.listFiles()
                 ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") }
                 ?.maxByOrNull { it.length() }
                 ?: throw IllegalStateException("No video file was made (no video found at this link).")
-            State.text = "Saving to Downloads…"; State.percent = 100; State.changed()
+            State.stage = State.Stage.FINISH
+            State.text = "Finishing up…"; State.percent = 100; State.changed()
             val name = saveToDownloads(file)
             State.phase = State.Phase.DONE
             State.text = "Done. Saved in Downloads: $name"
@@ -107,10 +147,15 @@ class DownloadService : Service() {
                 val raw = (e.message ?: e.toString()).trim()
                 val topic = Help.find(raw, url)
                 State.phase = State.Phase.ERROR
+                State.failedStage = State.stage
                 State.helpTopic = topic?.id
                 State.needsLogin = topic?.login == true
                 State.errorShort = topic?.simple?.ifEmpty { null } ?: "The download did not work."
                 State.errorDetails = raw
+                State.sessionCode = 0
+                val base = Cookies.baseDomain(Cookies.hostOf(url))
+                if (topic?.login == true && base == "instagram.com" && Cookies.savedHasSession(this, base))
+                    State.sessionCode = Cookies.checkInstagram(this)
                 State.text = ""
                 notifyDone("Download failed", State.errorShort)
             }
@@ -118,6 +163,7 @@ class DownloadService : Service() {
         } finally {
             working = false
             dir.deleteRecursively()
+            Quality.infoFile(this).delete()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -151,7 +197,7 @@ class DownloadService : Service() {
         )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Fetchly").setContentText(text)
+            .setContentTitle("Fetchy").setContentText(text)
             .setProgress(100, pct, indeterminate).setOngoing(true).setOnlyAlertOnce(true)
             .setContentIntent(openApp())
             .addAction(Notification.Action.Builder(null, "Cancel", cancel).build())

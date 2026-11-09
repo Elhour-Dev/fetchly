@@ -11,7 +11,12 @@ import com.yausername.youtubedl_android.YoutubeDLRequest
 object State {
     enum class Phase { IDLE, RUNNING, DONE, ERROR }
 
+    /** Steps of one download, same idea as the desktop app. */
+    enum class Stage(val failedAt: String) { FETCH("fetching video info"), DOWNLOAD("downloading"), FINISH("finishing (merging video and audio)") }
+
     @Volatile var phase = Phase.IDLE
+    @Volatile var stage = Stage.FETCH
+    @Volatile var failedStage: Stage? = null
     @Volatile var percent = 0
     @Volatile var text = ""
     @Volatile var errorShort = ""
@@ -19,6 +24,7 @@ object State {
     @Volatile var helpTopic: String? = null
     @Volatile var needsLogin = false
     @Volatile var failedUrl = ""
+    @Volatile var sessionCode = 0        // HTTP status of the Instagram login check after a failure (0 = not checked)
     @Volatile var cookiesSaved = false   // true after a login or import; the error card then offers "Retry"
     @Volatile var updateOffered = false  // the update pop-up was already shown for the current error
     @Volatile var startupChecked = false // the "tools are old" check runs once per app start
@@ -86,13 +92,25 @@ object Tools {
     /** Errors that updating yt-dlp may fix (ids from Help). */
     val updateTopics = setOf("g_update", "g_format", "g_unsupported")
 
-    fun updateSnoozed(ctx: Context) = System.currentTimeMillis() < prefs(ctx).getLong("update_snooze_until", 0)
+    /** No pop-up for 24 hours after "Later", and none for 3 days after an update (the newest yt-dlp cannot fix an unsupported link). */
+    fun updateSnoozed(ctx: Context): Boolean {
+        val now = System.currentTimeMillis()
+        return now < prefs(ctx).getLong("update_snooze_until", 0) || now - prefs(ctx).getLong("last_update", 0) < 3 * DAY
+    }
+    /** True when yt-dlp was updated in the last 3 days, so a "please report this issue" error is the site's fault. */
+    fun recentlyUpdated(ctx: Context) = System.currentTimeMillis() - prefs(ctx).getLong("last_update", 0) < 3 * DAY
     fun snoozeUpdate(ctx: Context) { prefs(ctx).edit().putLong("update_snooze_until", System.currentTimeMillis() + DAY).apply() }
 
     /** True when the tools are more than 7 days old (never updated: counted from when the app was installed or updated). */
     fun updateOld(ctx: Context): Boolean {
-        val installed = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime } catch (_: Exception) { System.currentTimeMillis() }
-        val last = maxOf(prefs(ctx).getLong("last_update", 0), installed)
+        // The bundled yt-dlp can already be old on a fresh install, so go by its own release date (e.g. 2025.11.12).
+        val built = try {
+            java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.US).parse(version(ctx).take(10))?.time   // call off the UI thread
+        } catch (_: Exception) { null } ?: 0L
+        val installed = if (built > 0) 0L else
+            try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime } catch (_: Exception) { System.currentTimeMillis() }
+        // Once an update was run (even "already the newest"), count from that day: the newest release can itself be weeks old.
+        val last = prefs(ctx).getLong("last_update", 0).takeIf { it > 0 } ?: maxOf(built, installed)
         return System.currentTimeMillis() - last > WEEK
     }
 }
@@ -143,9 +161,10 @@ object Cookies {
         f.writeText((listOf(HEADER) + old + fresh).joinToString("\n") + "\n")
     }
 
-    /** Netscape lines for the cookies a WebView holds for these hosts. */
+    /** Netscape lines for the cookies a WebView holds for these hosts. Flushes the WebView store first. */
     fun fromWebView(hosts: Set<String>, base: String): List<String> {
         val cm = android.webkit.CookieManager.getInstance()
+        cm.flush()
         val seen = HashSet<String>()
         val out = ArrayList<String>()
         val expiry = System.currentTimeMillis() / 1000 + 180L * 24 * 3600
@@ -153,13 +172,59 @@ object Cookies {
             val raw = cm.getCookie("https://$h") ?: continue
             for (part in raw.split(';')) {
                 val name = part.substringBefore('=').trim()
-                val value = part.substringAfter('=', "").trim()
+                val value = part.substringAfter('=', "").trim().replace(Regex("[\\t\\r\\n]"), "")
                 if (name.isEmpty() || !seen.add(name)) continue
                 out.add(".$base\tTRUE\t/\tTRUE\t$expiry\t$name\t$value")
             }
         }
         return out
     }
+
+    /** Cookie names that prove a login on well-known sites (all must be present). null = unknown site. */
+    fun sessionNames(base: String): Set<String>? = when (base) {
+        "instagram.com", "tiktok.com" -> setOf("sessionid")
+        "facebook.com" -> setOf("c_user", "xs")
+        "x.com", "twitter.com" -> setOf("auth_token")
+        "reddit.com" -> setOf("reddit_session")
+        else -> null
+    }
+
+    private fun nameOf(line: String) = line.split('\t').getOrNull(5) ?: ""
+    private fun valueOf(line: String) = line.split('\t').getOrNull(6) ?: ""
+
+    /** True when every session cookie is there with a non-empty value. Looks at names only. */
+    fun hasSession(lines: List<String>, base: String): Boolean {
+        val need = sessionNames(base) ?: return lines.isNotEmpty()
+        return need.all { n -> lines.any { nameOf(it) == n && valueOf(it).isNotEmpty() } }
+    }
+
+    /** Read the saved file back and check the session cookie is in it (for the given site). */
+    fun savedHasSession(ctx: Context, base: String): Boolean {
+        val f = Tools.cookiesFile(ctx)
+        if (!f.exists()) return false
+        return hasSession(f.readLines().filter { isData(it) && domainOf(it) == base }, base)
+    }
+
+    /**
+     * Asks Instagram itself whether the saved login is accepted. Sends the cookies only to instagram.com
+     * (like yt-dlp does) and returns the HTTP status only. Call on a background thread. 0 = no answer.
+     */
+    fun checkInstagram(ctx: Context): Int = try {
+        val f = Tools.cookiesFile(ctx)
+        val header = f.readLines().filter { isData(it) && domainOf(it) == "instagram.com" }
+            .joinToString("; ") { nameOf(it) + "=" + valueOf(it) }
+        val c = java.net.URL("https://www.instagram.com/api/v1/accounts/current_user/?edit=true")
+            .openConnection() as java.net.HttpURLConnection
+        c.connectTimeout = 10000; c.readTimeout = 10000; c.instanceFollowRedirects = false
+        c.setRequestProperty("Cookie", header)
+        c.setRequestProperty("X-IG-App-ID", "936619743392459")
+        c.setRequestProperty("User-Agent", android.webkit.WebSettings.getDefaultUserAgent(ctx))   // same browser the login used
+        val code = c.responseCode
+        c.disconnect(); code
+    } catch (e: Exception) { 0 }
+
+    /** Cookie names only (never values), for logs. */
+    fun names(lines: List<String>) = lines.map { nameOf(it) }
 
     /** Copy a picked cookies.txt into private storage. Returns an error message, or null when it worked. */
     fun import(ctx: Context, uri: android.net.Uri): String? = try {

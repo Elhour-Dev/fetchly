@@ -26,6 +26,7 @@ class MainActivity : Activity() {
     private lateinit var sTitle: TextView
     private lateinit var sSub: TextView
     private lateinit var bar: android.widget.ProgressBar
+    private lateinit var spin: android.widget.ProgressBar
     private lateinit var cancel: View
     private lateinit var logIn: View
     private lateinit var importBtn: View
@@ -59,7 +60,7 @@ class MainActivity : Activity() {
             setImageResource(R.drawable.ic_logo); setPadding(dp(9), dp(9), dp(9), dp(9))
             background = shape(col(R.color.accent), 12)
         }, LinearLayout.LayoutParams(dp(40), dp(40)))
-        header.addView(label("Fetchly", 20f, bold = true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
+        header.addView(label("Fetchy", 20f, bold = true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
         header.addView(button("Help", Kind.GHOST, 40) { openHelp(null) }.apply { setPadding(dp(16), 0, dp(16), 0) },
             LinearLayout.LayoutParams(-2, dp(40)))
         header.addView(button("Settings", Kind.GHOST, 40) { startActivity(Intent(this, SettingsActivity::class.java)) }
@@ -108,12 +109,18 @@ class MainActivity : Activity() {
         status.add(sSub, 4)
         bar = progressBar()
         status.add(bar, 12, -1, dp(8))
+        spin = android.widget.ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(col(R.color.accent))
+        }
+        status.add(spin, 12, dp(28), dp(28))
         cancel = button("Cancel download", Kind.GHOST) {
             startService(Intent(this, DownloadService::class.java).setAction(DownloadService.ACTION_CANCEL))
         }
         status.add(cancel, 14)
         logIn = button("Log in", Kind.PRIMARY) {
-            startActivity(Intent(this, LoginActivity::class.java).putExtra("url", Cookies.loginUrl(State.failedUrl)))
+            @Suppress("DEPRECATION")
+            startActivityForResult(Intent(this, LoginActivity::class.java).putExtra("url", Cookies.loginUrl(State.failedUrl)), 21)
         }
         status.add(logIn, 14)
         importBtn = button("Import cookies.txt", Kind.TONAL) {
@@ -138,7 +145,11 @@ class MainActivity : Activity() {
             try {
                 Tools.init(this)
                 ready = true
+                // Once per app start: offer an update if the tools are old. It only updates after a tap.
+                val offer = !State.startupChecked && Tools.updateOld(this) && !Tools.updateSnoozed(this)
+                State.startupChecked = true
                 runOnUiThread {
+                    if (offer) showUpdateDialog(false) { startDownload() }
                     if (pendingStart) { pendingStart = false; State.phase = State.Phase.IDLE; State.text = ""; startDownload() } else { if (State.phase == State.Phase.IDLE) State.text = ""; render() }
                     loadQualities()
                 }
@@ -148,13 +159,7 @@ class MainActivity : Activity() {
             }
         }
         handleIntent(intent)
-
-        // Once per app start: offer an update if the tools are old. It only updates after a tap.
-        if (!State.startupChecked) {
-            State.startupChecked = true
-            if (Tools.updateOld(this) && !Tools.updateSnoozed(this))
-                scroll.post { showUpdateDialog(false) { startDownload() } }
-        }
+        checkAppUpdate()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -165,7 +170,7 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); State.listener = { render() }; render() }
     override fun onDestroy() { State.listener = null; super.onDestroy() }
 
-    /** Share menu: a link shared to Fetchly fills the box and starts the download. */
+    /** Share menu: a link shared to Fetchy fills the box and starts the download. */
     private fun handleIntent(i: Intent?) {
         if (i?.action != Intent.ACTION_SEND) return
         val shared = i.getStringExtra(Intent.EXTRA_TEXT) ?: return
@@ -198,14 +203,17 @@ class MainActivity : Activity() {
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 10)
         State.cookiesSaved = false
         State.updateOffered = false
-        State.phase = State.Phase.RUNNING; State.text = "Starting…"; State.percent = 0
+        State.phase = State.Phase.RUNNING; State.text = "Fetching video info…"; State.percent = 0
+        State.stage = State.Stage.FETCH; State.failedStage = null
         cancelLoad()
+        renderQuality()
         val opt = if (loadedLink == link) options?.firstOrNull { it.key == selected } else null
         if (opt != null) Quality.remember(this, opt.key)
         else Toast.makeText(this, if (failed) "Could not load the qualities. Downloading the best quality."
             else "Downloading the best quality.", Toast.LENGTH_LONG).show()
         startForegroundService(Intent(this, DownloadService::class.java).putExtra(DownloadService.EXTRA_URL, link)
-            .putExtra(DownloadService.EXTRA_FORMAT, opt?.format).putExtra(DownloadService.EXTRA_AUDIO, opt?.audio == true))
+            .putExtra(DownloadService.EXTRA_FORMAT, opt?.format).putExtra(DownloadService.EXTRA_AUDIO, opt?.audio == true)
+            .putExtra(DownloadService.EXTRA_USE_INFO, opt != null))
         render()
     }
 
@@ -246,7 +254,7 @@ class MainActivity : Activity() {
         qList.removeAllViews()
         qNote.text = when {
             loading -> if (ready) "Checking what this video offers…" else "Getting ready…"
-            failed -> "Could not load the qualities. Fetchly will download the best quality."
+            failed -> "Could not load the qualities. Fetchy will download the best quality."
             else -> ""
         }
         show(qNote, qNote.text.isNotEmpty())
@@ -283,7 +291,9 @@ class MainActivity : Activity() {
         download.alpha = if (download.isEnabled) 1f else 0.5f
 
         show(status, p != State.Phase.IDLE)
-        show(bar, running)
+        val downloading = running && ready && State.stage == State.Stage.DOWNLOAD
+        show(bar, downloading)                 // a real progress bar only while bytes are coming in
+        show(spin, running && !downloading)    // spinner while fetching info, finishing, or getting ready
         show(cancel, running && ready)
         bar.progress = State.percent
         val err = p == State.Phase.ERROR
@@ -292,8 +302,12 @@ class MainActivity : Activity() {
         when (p) {
             State.Phase.RUNNING -> {
                 tint(R.color.card, R.color.border, R.color.text, R.color.muted)
-                sTitle.text = if (ready) "Downloading" else "Getting ready"
-                sSub.text = State.text
+                when {
+                    !ready -> { sTitle.text = "Getting ready"; sSub.text = State.text }
+                    State.stage == State.Stage.FETCH -> { sTitle.text = "Fetching video info…"; sSub.text = "" }
+                    State.stage == State.Stage.DOWNLOAD -> { sTitle.text = "Downloading…"; sSub.text = "${State.percent}%" }
+                    else -> { sTitle.text = "Finishing up…"; sSub.text = "Merging video and audio." }
+                }
             }
             State.Phase.DONE -> {
                 tint(R.color.ok_bg, R.color.ok_border, R.color.ok_text, R.color.ok_text)
@@ -304,9 +318,22 @@ class MainActivity : Activity() {
                 tint(R.color.err_bg, R.color.err_border, R.color.err_text, R.color.err_text)
                 if (retryMode) { sTitle.text = "Cookies saved"; sSub.text = "Tap Retry to download again." }
                 else {
-                    sTitle.text = State.errorShort
-                    sSub.text = if (login) "This site wants you to be logged in. Tap \"Log in\", sign in, then tap Done. " +
-                        "If the site does not allow it, tap \"Import cookies.txt\"." else ""
+                    val fresh = State.helpTopic == "g_update" && Tools.recentlyUpdated(this)
+                    sTitle.text = if (fresh) "This site cannot be read right now." else State.errorShort
+                    val at = State.failedStage?.let { "Failed while ${it.failedAt}." } ?: ""
+                    val base = Cookies.baseDomain(Cookies.hostOf(State.failedUrl))
+                    val loggedIn = Cookies.sessionNames(base) != null && Cookies.savedHasSession(this, base)
+                    sSub.text = (if (fresh) "The tools are already up to date. The site changed and the downloader cannot read this link yet. " +
+                        "Try again in a few days, after the next yt-dlp update. "
+                    else if (login && loggedIn) when (State.sessionCode) {
+                        200 -> "Instagram accepts your login, but gave no video for this link. The story may be gone, or this account cannot see it. "
+                        401, 403 -> "Instagram no longer accepts the saved login. Tap \"Log in\" to sign in again. "
+                        429 -> "Instagram is limiting this network right now. Turn off VPN or switch network, wait a few minutes, then tap Retry. "
+                        else -> "Fetchy has your $base login, but the site still asked for one. " +
+                            "The login may have expired, or this account cannot see this link. Log in again, or import a fresh cookies.txt. "
+                    }
+                    else if (login) "Tap \"Log in\" and sign in; " +
+                        "Fetchy closes the page and retries by itself. If the site does not allow it, tap \"Import cookies.txt\". " else "") + at
                 }
             }
             else -> {}
@@ -332,15 +359,19 @@ class MainActivity : Activity() {
     private fun copyErrorDetails() {
         val link = urlRegex.find(url.text.toString())?.value?.substringBefore('?') ?: ""
         val text = buildString {
-            appendLine("Fetchly Android 1.0")
+            appendLine("Fetchy Android 1.0")
             appendLine("yt-dlp: " + Tools.version(this@MainActivity))
             appendLine("Android " + Build.VERSION.RELEASE + ", " + Build.MANUFACTURER + " " + Build.MODEL)
             appendLine("Cookies saved: " + Tools.cookiesFile(this@MainActivity).exists())
+            val base = Cookies.baseDomain(Cookies.hostOf(State.failedUrl))
+            if (Cookies.sessionNames(base) != null) appendLine("Login cookie for $base in file: " + Cookies.savedHasSession(this@MainActivity, base))
+            if (State.sessionCode != 0) appendLine("Instagram login check: HTTP " + State.sessionCode)
             appendLine("Link: $link")
+            appendLine("Failed while: " + (State.failedStage?.failedAt ?: "unknown"))
             appendLine("Error:")
             append(State.errorDetails)
         }
-        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fetchly error", text))
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fetchy error", text))
         Toast.makeText(this, "Error details copied.", Toast.LENGTH_SHORT).show()
     }
 
@@ -348,11 +379,21 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 21) {   // login page
+            when (resultCode) {
+                RESULT_OK -> { Toast.makeText(this, "Logged in. Retrying the download…", Toast.LENGTH_SHORT).show(); startDownload() }
+                LoginActivity.RESULT_IMPORT -> @Suppress("DEPRECATION") startActivityForResult(Cookies.pickIntent(), 20)
+            }
+            return
+        }
         if (requestCode != 20 || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         val err = Cookies.import(this, uri)
         if (err == null) State.cookiesSaved = true
-        Toast.makeText(this, err ?: "Cookies imported.", Toast.LENGTH_LONG).show()
+        val base = Cookies.baseDomain(Cookies.hostOf(State.failedUrl))
+        val noLogin = err == null && Cookies.sessionNames(base) != null && !Cookies.savedHasSession(this, base)
+        Toast.makeText(this, err ?: if (noLogin) "Imported, but this file has no login cookie for $base. Export it again while logged in."
+            else "Cookies imported.", Toast.LENGTH_LONG).show()
         render()
     }
 }
