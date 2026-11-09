@@ -17,7 +17,6 @@ import kotlin.concurrent.thread
 object AppUpdate {
     private const val API = "https://api.github.com/repos/Elhour-Dev/fetchly/releases/latest"
     private const val DAY = 24L * 60 * 60 * 1000
-    @Volatile private var checked = false   // once per app start
 
     class Release(val tag: String, val url: String)
 
@@ -48,19 +47,23 @@ object AppUpdate {
     } catch (e: Exception) { null }
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-    fun snoozed(ctx: Context, tag: String) = System.currentTimeMillis() < prefs(ctx).getLong("app_update_snooze_$tag", 0L)
-    fun snooze(ctx: Context, tag: String) { prefs(ctx).edit().putLong("app_update_snooze_$tag", System.currentTimeMillis() + DAY).apply() }
-
-    fun markChecked(): Boolean { val was = checked; checked = true; return !was }
+    /** True at most once a day: remembers when GitHub was last asked (even if the answer failed). */
+    fun dueToday(ctx: Context): Boolean {
+        val p = prefs(ctx)
+        val now = System.currentTimeMillis()
+        if (now - p.getLong("app_update_last_check", 0L) < DAY) return false
+        p.edit().putLong("app_update_last_check", now).apply()
+        return true
+    }
 }
 
-/** Once per app start: if a newer version exists, show a pop-up with a Download button. */
+/** At startup, at most once a day: if a newer release exists, show a pop-up. Silent on any failure. Never installs. */
 fun Activity.checkAppUpdate() {
-    if (!AppUpdate.markChecked()) return
+    if (!AppUpdate.dueToday(this)) return
     thread {
         val rel = AppUpdate.latest() ?: return@thread
         val current = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "0" } catch (e: Exception) { "0" }
-        if (!AppUpdate.isNewer(rel.tag, current) || AppUpdate.snoozed(this, rel.tag)) return@thread
+        if (!AppUpdate.isNewer(rel.tag, current)) return@thread
         runOnUiThread { showAppUpdateDialog(rel) }
     }
 }
@@ -71,16 +74,15 @@ private fun Activity.showAppUpdateDialog(rel: AppUpdate.Release) {
     dlg.requestWindowFeature(Window.FEATURE_NO_TITLE)
     val box = card(pad = 20)
     val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    box.addView(label("Update available", 20f, bold = true))
-    box.add(label("Fetchy ${rel.tag.removePrefix("v")} is ready. Download it and install it over this version.", 15f, R.color.muted), 8)
+    box.addView(label("New version ${rel.tag.removePrefix("v")}", 20f, bold = true))
+    box.add(label("A newer version of Fetchy is available. Download opens the release page.", 15f, R.color.muted), 8)
     box.add(buttons, 18)
     fun add(v: View, top: Int) = buttons.add(v, top, -1, dp(48))
     add(button("Download", Kind.PRIMARY) {
-        AppUpdate.snooze(this, rel.tag); dlg.dismiss()
+        dlg.dismiss()
         try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(rel.url))) } catch (e: Exception) { /* no browser */ }
     }, 0)
-    add(button("Later", Kind.GHOST) { AppUpdate.snooze(this, rel.tag); dlg.dismiss() }, 8)
-    dlg.setOnCancelListener { AppUpdate.snooze(this, rel.tag) }   // back button counts as "Later"
+    add(button("Later", Kind.GHOST) { dlg.dismiss() }, 8)
     dlg.setContentView(box)
     dlg.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
     dlg.show()

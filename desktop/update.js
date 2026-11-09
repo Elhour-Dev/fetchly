@@ -26,23 +26,26 @@ async function latestRelease(fetchFn) {
   } catch { return null; }
 }
 
-function snoozed(file, tag) {
-  try { const s = JSON.parse(fs.readFileSync(file, 'utf8')); return s.tag === tag && Date.now() < s.until; } catch { return false; }
+// At most one check per day: remember when we last asked GitHub (even if it failed).
+function dueToday(file) {
+  try { return Date.now() - JSON.parse(fs.readFileSync(file, 'utf8')).last >= DAY; } catch { return true; }
 }
-function snooze(file, tag) {
-  try { fs.writeFileSync(file, JSON.stringify({ tag, until: Date.now() + DAY })); } catch {}
+function markChecked(file) {
+  try { fs.writeFileSync(file, JSON.stringify({ last: Date.now() })); } catch {}
 }
 
-// Shows the pop-up when a newer version exists. Call after the window is up; never throws.
+// Shows the pop-up when a newer version exists. Call after the window is up; never throws, never installs.
 async function checkForUpdate({ dialog, shell, net, win, version, dataDir }) {
   try {
+    const file = path.join(dataDir, 'update-check.json');
+    if (!dueToday(file)) return;
+    markChecked(file);
     const rel = await latestRelease((u, o) => net.fetch(u, o));
-    const file = path.join(dataDir, 'update-snooze.json');
-    if (!rel || !isNewer(rel.tag, version) || snoozed(file, rel.tag)) return;
-    snooze(file, rel.tag);   // Download and Later both hide it for 24 hours
+    if (!rel || !isNewer(rel.tag, version)) return;
     const { response } = await dialog.showMessageBox(win, {
-      type: 'info', title: 'Update available', message: `Fetchy ${rel.tag.replace(/^v/, '')} is ready`,
-      detail: 'Download it and install it over this version.', buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1,
+      type: 'info', title: 'Fetchy', message: `New version ${rel.tag.replace(/^v/, '')}`,
+      detail: 'A newer version of Fetchy is available. Download opens the release page.',
+      buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1,
     });
     if (response === 0) shell.openExternal(rel.url);
   } catch {}
