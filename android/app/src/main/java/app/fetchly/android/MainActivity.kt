@@ -159,6 +159,7 @@ class MainActivity : Activity() {
             }
         }
         handleIntent(intent)
+        checkAppUpdate()
     }
 
     override fun onNewIntent(intent: Intent) {
