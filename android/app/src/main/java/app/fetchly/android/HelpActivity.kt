@@ -7,7 +7,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 
 /** Help: three expandable cards. Works offline (all text is in the app). Opens the card of the failed download. */
-class HelpActivity : Activity() {
+class HelpActivity : ThemedActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }

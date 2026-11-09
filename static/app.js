@@ -12,6 +12,8 @@
 
     videoForm: $('videoForm'),
     videoUrl: $('videoUrl'),
+    videoPlaylist: $('videoPlaylist'),
+    videoPlaylistRow: $('videoPlaylistRow'),
     videoPaste: $('videoPaste'),
     videoClear: $('videoClear'),
     videoHint: $('videoHint'),
@@ -544,9 +546,9 @@
     try {
       const result = await api('/api/video/info', {
         method: 'POST',
-        body: { url: value },
+        body: { url: value, playlist: !!els.videoPlaylist.checked },
         signal: controller.signal,
-        timeout: 95000,
+        timeout: els.videoPlaylist.checked ? 180000 : 95000,
       });
       if (seq !== state.video.requestSeq) return;
       state.video.jobId = result.job_id;
@@ -736,6 +738,15 @@
   function init() {
     setupTheme();
     setupUrlField(els.videoUrl, els.videoPaste, els.videoClear, els.videoUrlError);
+    const syncPlaylist = () => {
+      const isList = /[?&]list=/.test(els.videoUrl.value) || /\/playlist/.test(els.videoUrl.value);
+      els.videoPlaylistRow.classList.toggle('hidden', !isList);
+      els.videoPlaylistRow.classList.toggle('flex', isList);
+      if (!isList) els.videoPlaylist.checked = false;
+    };
+    els.videoUrl.addEventListener('input', syncPlaylist);
+    els.videoUrl.addEventListener('change', syncPlaylist);
+    setInterval(syncPlaylist, 700);
 
     els.videoForm.addEventListener('submit', handleVideoSubmit);
     els.videoRetry.addEventListener('click', () => els.videoForm.requestSubmit());

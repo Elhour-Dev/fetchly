@@ -23,7 +23,7 @@ import android.widget.Toast
  * Lets the user log in to a site inside the app. On "Done" the cookies go to the private cookies file for yt-dlp.
  * Nothing is bypassed: if a site (for example Google) refuses WebView logins, we just say so.
  */
-class LoginActivity : Activity() {
+class LoginActivity : ThemedActivity() {
     private lateinit var web: WebView
     private lateinit var notice: LinearLayout
     private lateinit var noticeText: android.widget.TextView

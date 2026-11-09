@@ -27,6 +27,7 @@ import sys
 import threading
 import time
 import unicodedata
+import zipfile
 import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -1062,6 +1063,33 @@ def extract_video_info_sync(url: str) -> dict[str, Any]:
     }
 
 
+def extract_playlist_info_sync(url: str) -> dict[str, Any]:
+    """Quick look at a playlist: title and number of videos (no per-video details)."""
+    options = _base_ydl_options()
+    options.update({"noplaylist": False, "extract_flat": "in_playlist", "skip_download": True})
+    with yt_dlp.YoutubeDL(options) as ydl:
+        info = ydl.extract_info(url, download=False)
+    entries = [e for e in (info.get("entries") or []) if e] if isinstance(info, dict) else []
+    if not entries:
+        raise FriendlyError("No videos were found in this playlist.", 422, "no_videos")
+    count = len(entries)
+    return {
+        "title": (str(info.get("title") or "Playlist").strip()[:260] + f" ({count} videos)"),
+        "duration": None,
+        "webpage_url": str(info.get("webpage_url") or url),
+        "uploader": str(info.get("uploader") or info.get("channel") or "")[:150],
+        "extractor": str(info.get("extractor_key") or "")[:80],
+        "thumbnail_url": None,
+        "is_playlist": True,
+        "formats": [
+            {"key": "best", "label": "Best quality", "detail": f"All {count} videos, saved as a ZIP",
+             "kind": "video", "size_bytes": None, "recommended": True},
+            {"key": "audio", "label": "Audio only", "detail": f"All {count} videos as MP3, saved as a ZIP",
+             "kind": "audio", "size_bytes": None, "recommended": False},
+        ],
+    }
+
+
 def _format_selector(quality: str) -> str:
     if quality in QUALITY_FORMAT_SELECTORS:
         return QUALITY_FORMAT_SELECTORS[quality]
@@ -1149,10 +1177,15 @@ def download_video_sync(job_id: str, quality: str) -> None:
                 eta=None,
             )
 
+    is_playlist = bool(job.video.get("is_playlist"))
+    pl_dir = DOWNLOADS_DIR / f"{job_id}_pl"
     options = _base_ydl_options()
     options.update({
         "format": selector,
-        "outtmpl": str(DOWNLOADS_DIR / f"{job_id}.%(ext)s"),
+        "outtmpl": str(pl_dir / "%(playlist_index)03d - %(title).80s.%(ext)s") if is_playlist
+        else str(DOWNLOADS_DIR / f"{job_id}.%(ext)s"),
+        "noplaylist": not is_playlist,
+        "ignoreerrors": is_playlist,
         "merge_output_format": "mp4",
         "overwrites": True,
         "continuedl": False,
@@ -1182,6 +1215,21 @@ def download_video_sync(job_id: str, quality: str) -> None:
         with yt_dlp.YoutubeDL(options) as ydl:
             ydl.download([job.url])
 
+        if is_playlist:
+            files = sorted(f for f in pl_dir.glob("*") if f.is_file() and not f.name.endswith((".part", ".ytdl", ".temp")))
+            if not files:
+                raise FriendlyError("No videos could be downloaded from this playlist.", 422, "no_videos")
+            job_store.set_progress(job_id, stage="processing", percent=100.0, speed=None, eta=None)
+            zip_path = DOWNLOADS_DIR / f"{job_id}.zip"
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as zf:
+                for f in files:
+                    zf.write(f, f.name)
+            shutil.rmtree(pl_dir, ignore_errors=True)
+            name = sanitize_filename(job.video.get("title") or "playlist", fallback="playlist", max_length=95, extension=".zip")
+            job_store.complete(job_id, file_path=zip_path, download_name=name)
+            logger.info("Playlist job %s complete (%s files)", job_id, len(files))
+            return
+
         final_file = _find_finished_file(job_id)
         if not final_file:
             raise FriendlyError(
@@ -1204,11 +1252,13 @@ def download_video_sync(job_id: str, quality: str) -> None:
         job_store.complete(job_id, file_path=final_file, download_name=download_name)
         logger.info("Video job %s complete (%s)", job_id, final_file.name)
     except FriendlyError as exc:
+        shutil.rmtree(pl_dir, ignore_errors=True)
         _cleanup_job_files(job_id)
         job_store.fail(job_id, exc.message)
         logger.warning("Video job %s failed: %s", job_id, exc.message)
     except Exception as exc:
         message = friendly_ytdlp_error(exc)
+        shutil.rmtree(pl_dir, ignore_errors=True)
         _cleanup_job_files(job_id)
         job_store.fail(job_id, message)
         logger.warning("Video job %s failed: %s", job_id, message)
@@ -1327,6 +1377,7 @@ async def add_security_headers(request: Request, call_next):
 
 class UrlRequest(BaseModel):
     url: str = Field(min_length=1, max_length=4096)
+    playlist: bool = False
 
 
 class VideoDownloadRequest(BaseModel):
@@ -1506,7 +1557,7 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
 
     try:
         info = await asyncio.wait_for(
-            asyncio.to_thread(extract_video_info_sync, url),
+            asyncio.to_thread(extract_playlist_info_sync if payload.playlist else extract_video_info_sync, url),
             timeout=VIDEO_INFO_TIMEOUT_SECONDS,
         )
         video = {
@@ -1516,6 +1567,7 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
             "uploader": info["uploader"],
             "extractor": info["extractor"],
             "has_thumbnail": bool(info["thumbnail_url"]),
+            "is_playlist": bool(info.get("is_playlist")),
             "formats": info["formats"],
         }
         job_store.update(

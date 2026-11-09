@@ -19,6 +19,7 @@ object State {
     @Volatile var failedStage: Stage? = null
     @Volatile var percent = 0
     @Volatile var text = ""
+    @Volatile var item = ""              // "Video 2 of 10 · " while a playlist downloads
     @Volatile var errorShort = ""
     @Volatile var errorDetails = ""
     @Volatile var helpTopic: String? = null

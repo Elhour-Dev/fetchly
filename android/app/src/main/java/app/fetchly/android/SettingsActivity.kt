@@ -9,7 +9,7 @@ import android.widget.Toast
 import kotlin.concurrent.thread
 
 /** Settings: cookies (log in again, import, remove) and tools (yt-dlp version, update). */
-class SettingsActivity : Activity() {
+class SettingsActivity : ThemedActivity() {
     private lateinit var cookieInfo: TextView
     private lateinit var remove: android.widget.Button
     private lateinit var version: TextView
@@ -21,6 +21,18 @@ class SettingsActivity : Activity() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = page(box)
         box.add(topBar("Settings"))
+
+        val ap = card()
+        ap.addView(label("Appearance", 18f, bold = true))
+        val cur = Theme.mode(this)
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("system" to "Auto", "light" to "Light", "dark" to "Dark").forEachIndexed { i, (m, n) ->
+            row.addView(button(n, if (m == cur) Kind.PRIMARY else Kind.GHOST, 44) {
+                Theme.set(this, m); recreate()
+            }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i > 0) marginStart = dp(8) })
+        }
+        ap.add(row, 12)
+        box.add(ap, 16)
 
         val ck = card()
         ck.addView(label("Cookies", 18f, bold = true))
@@ -53,7 +65,7 @@ class SettingsActivity : Activity() {
         }
     }
 
-    override fun onResume() { super.onResume(); refresh() }
+    override fun onResume() { super.onResume(); Theme.syncIcon(this); refresh() }
 
     private fun refresh() {
         val has = Tools.cookiesFile(this).exists()

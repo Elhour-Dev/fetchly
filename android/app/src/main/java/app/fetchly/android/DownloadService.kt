@@ -23,6 +23,7 @@ class DownloadService : Service() {
         const val EXTRA_FORMAT = "format"   // yt-dlp format selector from the quality picker (null = Best)
         const val EXTRA_AUDIO = "audio"     // true = extract MP3
         const val EXTRA_USE_INFO = "use_info" // true = reuse the video info saved by the quality picker
+        const val EXTRA_PLAYLIST = "playlist" // true = download every video of the playlist
         const val ACTION_CANCEL = "cancel"
         private const val PID = "fetchly-download"
         private const val CHANNEL = "downloads"
@@ -62,11 +63,13 @@ class DownloadService : Service() {
         val format = intent.getStringExtra(EXTRA_FORMAT) ?: Quality.BEST
         val audio = intent.getBooleanExtra(EXTRA_AUDIO, false)
         val useInfo = intent.getBooleanExtra(EXTRA_USE_INFO, false)
-        thread { work(url, format, audio, useInfo) }
+        val pl = intent.getBooleanExtra(EXTRA_PLAYLIST, false)
+        State.item = ""
+        thread { work(url, format, audio, useInfo && !pl, pl) }
         return START_NOT_STICKY
     }
 
-    private fun work(url: String, format: String, audio: Boolean, useInfo: Boolean) {
+    private fun work(url: String, format: String, audio: Boolean, useInfo: Boolean, playlist: Boolean = false) {
         val dir = File(cacheDir, "job")
         try {
             dir.deleteRecursively(); dir.mkdirs()
@@ -74,19 +77,23 @@ class DownloadService : Service() {
             fun request(fmt: String, aud: Boolean, info: File? = null) =
                 (if (info != null) YoutubeDLRequest(emptyList()).apply { addOption("--load-info-json", info.absolutePath) }
                 else YoutubeDLRequest(url)).apply {
-                addOption("--no-playlist")
+                if (playlist) { addOption("--yes-playlist"); addOption("--ignore-errors") } else addOption("--no-playlist")
                 addOption("-f", fmt)
                 if (aud) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
                 else addOption("--merge-output-format", "mp4")
                 addOption("--no-mtime")
                 addOption("--trim-filenames", "120")
-                addOption("-o", dir.absolutePath + "/%(title).80s [%(id)s].%(ext)s")
+                addOption("-o", dir.absolutePath + (if (playlist) "/%(playlist_index)03d - %(title).70s [%(id)s].%(ext)s" else "/%(title).80s [%(id)s].%(ext)s"))
                 val c = Tools.cookiesFile(this@DownloadService)
                 if (c.exists()) addOption("--cookies", c.absolutePath)
             }
             var last = -1
             val progress: (Float, Long, String?) -> Unit = { p, _, line ->
                 val l = line ?: ""
+                Regex("Downloading (?:item|video) (\\d+) of (\\d+)").find(l)?.let {
+                    State.item = "Video ${it.groupValues[1]} of ${it.groupValues[2]} · "
+                    State.stage = State.Stage.FETCH; last = -1
+                }
                 if (l.contains("[Merger]") || l.contains("[ExtractAudio]") || l.contains("[VideoRemuxer]") || l.contains("[ffmpeg]")) {
                     if (State.stage != State.Stage.FINISH) {
                         State.stage = State.Stage.FINISH; State.percent = 100
@@ -129,13 +136,15 @@ class DownloadService : Service() {
                 run(Quality.BEST, false)
             }
             if (cancelled) throw IllegalStateException("Cancelled")
-            val file = dir.listFiles()
+            val files = dir.listFiles()
                 ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") }
-                ?.maxByOrNull { it.length() }
-                ?: throw IllegalStateException("No video file was made (no video found at this link).")
+                ?.sortedBy { it.name }.orEmpty()
+            if (files.isEmpty()) throw IllegalStateException("No video file was made (no video found at this link).")
             State.stage = State.Stage.FINISH
+            State.item = ""
             State.text = "Finishing up…"; State.percent = 100; State.changed()
-            val name = saveToDownloads(file)
+            val name = if (playlist) { files.forEach { saveToDownloads(it) }; "${files.size} files" }
+                else saveToDownloads(files.maxByOrNull { it.length() }!!)
             State.phase = State.Phase.DONE
             State.text = "Done. Saved in Downloads: $name"
             State.changed()

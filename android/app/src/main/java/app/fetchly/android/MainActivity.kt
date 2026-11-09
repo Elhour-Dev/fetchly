@@ -19,7 +19,7 @@ import android.widget.Toast
 import com.yausername.youtubedl_android.YoutubeDL
 import kotlin.concurrent.thread
 
-class MainActivity : Activity() {
+class MainActivity : ThemedActivity() {
     private lateinit var url: EditText
     private lateinit var download: android.widget.Button
     private lateinit var status: LinearLayout
@@ -38,6 +38,7 @@ class MainActivity : Activity() {
     private val urlRegex = Regex("https?://\\S+")
 
     // Quality picker
+    private lateinit var playlist: android.widget.CheckBox
     private lateinit var qCard: LinearLayout
     private lateinit var qNote: TextView
     private lateinit var qList: LinearLayout
@@ -57,8 +58,7 @@ class MainActivity : Activity() {
         // Header: logo + name on the left, Help and Settings on the right (like the web header).
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         header.addView(ImageView(this).apply {
-            setImageResource(R.drawable.ic_logo); setPadding(dp(9), dp(9), dp(9), dp(9))
-            background = shape(col(R.color.accent), 12)
+            setImageResource(R.drawable.ic_logo)
         }, LinearLayout.LayoutParams(dp(40), dp(40)))
         header.addView(label("Fetchy", 20f, bold = true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
         header.addView(button("Help", Kind.GHOST, 40) { openHelp(null) }.apply { setPadding(dp(16), 0, dp(16), 0) },
@@ -85,6 +85,11 @@ class MainActivity : Activity() {
         small.addView(button("Clear", Kind.GHOST, 44) { url.setText("") }, LinearLayout.LayoutParams(0, dp(44), 1f))
         box.add(small, 10)
 
+        playlist = android.widget.CheckBox(this).apply {
+            text = "Download the whole playlist"; setTextColor(col(R.color.text)); visibility = View.GONE
+        }
+        box.add(playlist, 10)
+
         qCard = card().apply { visibility = View.GONE }
         qCard.addView(label("Quality", 13f, R.color.muted, bold = true))
         qNote = label("", 14f, R.color.muted)
@@ -95,7 +100,12 @@ class MainActivity : Activity() {
         url.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) { url.removeCallbacks(loader); url.postDelayed(loader, 500) }
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val t = s.toString()
+                val isList = t.contains("list=") || t.contains("/playlist")
+                playlist.visibility = if (isList) View.VISIBLE else View.GONE
+                if (!isList) playlist.isChecked = false
+                url.removeCallbacks(loader); url.postDelayed(loader, 500) }
         })
 
         download = button("Download", Kind.PRIMARY, 64) { startDownload() }.apply { textSize = 19f }
@@ -167,7 +177,13 @@ class MainActivity : Activity() {
         handleIntent(intent)
     }
 
-    override fun onResume() { super.onResume(); State.listener = { render() }; render() }
+    private val shownTheme by lazy { Theme.mode(this) }
+    override fun onResume() {
+        super.onResume()
+        if (Theme.mode(this) != shownTheme) { recreate(); return }
+        Theme.syncIcon(this)
+        State.listener = { render() }; render()
+    }
     override fun onDestroy() { State.listener = null; super.onDestroy() }
 
     /** Share menu: a link shared to Fetchy fills the box and starts the download. */
@@ -207,13 +223,14 @@ class MainActivity : Activity() {
         State.stage = State.Stage.FETCH; State.failedStage = null
         cancelLoad()
         renderQuality()
-        val opt = if (loadedLink == link) options?.firstOrNull { it.key == selected } else null
+        val whole = playlist.isChecked
+        val opt = if (loadedLink == link && !whole) options?.firstOrNull { it.key == selected } else null
         if (opt != null) Quality.remember(this, opt.key)
         else Toast.makeText(this, if (failed) "Could not load the qualities. Downloading the best quality."
             else "Downloading the best quality.", Toast.LENGTH_LONG).show()
         startForegroundService(Intent(this, DownloadService::class.java).putExtra(DownloadService.EXTRA_URL, link)
             .putExtra(DownloadService.EXTRA_FORMAT, opt?.format).putExtra(DownloadService.EXTRA_AUDIO, opt?.audio == true)
-            .putExtra(DownloadService.EXTRA_USE_INFO, opt != null))
+            .putExtra(DownloadService.EXTRA_USE_INFO, opt != null).putExtra(DownloadService.EXTRA_PLAYLIST, whole))
         render()
     }
 
@@ -305,7 +322,7 @@ class MainActivity : Activity() {
                 when {
                     !ready -> { sTitle.text = "Getting ready"; sSub.text = State.text }
                     State.stage == State.Stage.FETCH -> { sTitle.text = "Fetching video info…"; sSub.text = "" }
-                    State.stage == State.Stage.DOWNLOAD -> { sTitle.text = "Downloading…"; sSub.text = "${State.percent}%" }
+                    State.stage == State.Stage.DOWNLOAD -> { sTitle.text = "Downloading…"; sSub.text = State.item + "${State.percent}%" }
                     else -> { sTitle.text = "Finishing up…"; sSub.text = "Merging video and audio." }
                 }
             }
