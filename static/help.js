@@ -23,7 +23,7 @@
     {
       id: 'login', title: 'Instagram and other sites that need a login',
       match: /log ?in|sign ?in|login required|authenticat|cookies|rate-limit|empty media response|requires an account|members?[- ]only|need to log/i,
-      see: 'A message like "Instagram needs a login", "login required", "empty media response" or "No images were found" for an Instagram link.',
+      see: 'A message like "Instagram needs a login", "login required", "empty media response" for an Instagram video link.',
       why: 'The site only shows this content to signed-in users.',
       fix: [
         'Log in to the site in Firefox.',
@@ -58,14 +58,14 @@
       ]
     },
     {
-      id: 'unsupported', title: 'Link not supported, or image links that fail',
-      match: /unsupported url|aren.t allowed|private network|local and private|not supported|no video|no images? found|could not find|no media|not a valid|invalid url|no supported/i,
-      see: '"Unsupported URL", "No video found" or no images found.',
-      why: 'The link is not a video/image page, is cut off, or the site is not supported.',
+      id: 'unsupported', title: 'Link not supported, or image links',
+      match: /unsupported url|aren.t allowed|private network|local and private|not supported|no video|videos only|could not find|no media|not a valid|invalid url|no supported/i,
+      see: '"Unsupported URL", "No video found" or "Fetchly downloads videos only."',
+      why: 'The link is not a video page (Fetchly downloads videos only), is cut off, or the site is not supported.',
       fix: [
         'Copy the full link from the address bar again. Remove extra text before or after it.',
         'Use the page link of the video or post, not a link to a search or home page.',
-        'For images: use the page that shows the images. Some sites load images late or hide them behind a login.',
+        'Image links do not work. Fetchly downloads videos only.',
         'Press "Update tools". New site support comes with new versions.'
       ]
     },
@@ -328,7 +328,6 @@
     if (upd && upd.parentNode) upd.parentNode.insertBefore(help, upd);
     else { help.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:50'; document.body.appendChild(help); }
     watch('videoErrorText');
-    watch('imagesErrorText');
     window.fetchlyHelp = { open: openHelp, find: findTopic };
   }
 
