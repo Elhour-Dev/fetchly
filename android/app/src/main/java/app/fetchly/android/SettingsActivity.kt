@@ -6,8 +6,6 @@ import android.os.Bundle
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import com.yausername.youtubedl_android.YoutubeDL
-import java.io.File
 import kotlin.concurrent.thread
 
 /** Settings: cookies (log in again, import, remove) and tools (yt-dlp version, update). */
@@ -82,25 +80,7 @@ class SettingsActivity : Activity() {
         updating = true; refresh()
         version.text = "Updating yt-dlp…"
         thread {
-            val dir = File(noBackupFilesDir, "youtubedl-android/yt-dlp")
-            val backup = File(noBackupFilesDir, "yt-dlp-backup")
-            var msg: String
-            try {
-                Tools.init(this)
-                val before = Tools.version(this)
-                backup.deleteRecursively()
-                if (dir.exists()) dir.copyRecursively(backup, true)
-                val r = YoutubeDL.getInstance().updateYoutubeDL(applicationContext, YoutubeDL.UpdateChannel.STABLE)
-                val after = Tools.version(this)
-                if (after == "unknown") throw IllegalStateException("New version did not start")
-                msg = if (r == YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE) "Already the newest version: yt-dlp $after"
-                else "Updated: yt-dlp $before to $after"
-            } catch (e: Exception) {
-                try { if (backup.exists()) { dir.deleteRecursively(); backup.copyRecursively(dir, true) } } catch (_: Exception) {}
-                msg = "Update failed. Old version kept: yt-dlp " + Tools.version(this) + "\n(" + (e.message ?: e.toString()).take(200) + ")"
-            } finally {
-                backup.deleteRecursively()
-            }
+            val msg = Tools.update(this).message
             runOnUiThread { updating = false; version.text = msg; refresh() }
         }
     }

@@ -16,6 +16,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.yausername.youtubedl_android.YoutubeDL
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
@@ -34,6 +35,18 @@ class MainActivity : Activity() {
     @Volatile private var ready = false
     private var pendingStart = false
     private val urlRegex = Regex("https?://\\S+")
+
+    // Quality picker
+    private lateinit var qCard: LinearLayout
+    private lateinit var qNote: TextView
+    private lateinit var qList: LinearLayout
+    private var options: List<QOption>? = null
+    private var selected = "best"
+    private var loadedLink: String? = null
+    private var loading = false
+    private var failed = false
+    private var loadSeq = 0
+    private val loader = Runnable { loadQualities() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,6 +83,19 @@ class MainActivity : Activity() {
         small.addView(button("Paste", Kind.TONAL, 44) { pasteFromClipboard() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(8) })
         small.addView(button("Clear", Kind.GHOST, 44) { url.setText("") }, LinearLayout.LayoutParams(0, dp(44), 1f))
         box.add(small, 10)
+
+        qCard = card().apply { visibility = View.GONE }
+        qCard.addView(label("Quality", 13f, R.color.muted, bold = true))
+        qNote = label("", 14f, R.color.muted)
+        qCard.add(qNote, 6)
+        qList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        qCard.add(qList, 8)
+        box.add(qCard, 14)
+        url.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { url.removeCallbacks(loader); url.postDelayed(loader, 500) }
+        })
 
         download = button("Download", Kind.PRIMARY, 64) { startDownload() }.apply { textSize = 19f }
         box.add(download, 14, -1, dp(64))
@@ -114,6 +140,7 @@ class MainActivity : Activity() {
                 ready = true
                 runOnUiThread {
                     if (pendingStart) { pendingStart = false; State.phase = State.Phase.IDLE; State.text = ""; startDownload() } else { if (State.phase == State.Phase.IDLE) State.text = ""; render() }
+                    loadQualities()
                 }
             } catch (e: Exception) {
                 runOnUiThread { State.phase = State.Phase.ERROR; State.helpTopic = null; State.needsLogin = false
@@ -121,6 +148,13 @@ class MainActivity : Activity() {
             }
         }
         handleIntent(intent)
+
+        // Once per app start: offer an update if the tools are old. It only updates after a tap.
+        if (!State.startupChecked) {
+            State.startupChecked = true
+            if (Tools.updateOld(this) && !Tools.updateSnoozed(this))
+                scroll.post { showUpdateDialog(false) { startDownload() } }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -139,8 +173,7 @@ class MainActivity : Activity() {
         val link = urlRegex.find(shared)?.value
         if (link == null) { State.phase = State.Phase.ERROR; State.helpTopic = "g_unsupported"; State.needsLogin = false
             State.errorShort = "No link found in what you shared."; State.errorDetails = ""; render(); return }
-        url.setText(link)
-        startDownload()
+        url.setText(link)   // the quality picker loads; tap Download to start
     }
 
     private fun pasteFromClipboard() {
@@ -164,9 +197,81 @@ class MainActivity : Activity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 10)
         State.cookiesSaved = false
+        State.updateOffered = false
         State.phase = State.Phase.RUNNING; State.text = "Starting…"; State.percent = 0
-        startForegroundService(Intent(this, DownloadService::class.java).putExtra(DownloadService.EXTRA_URL, link))
+        cancelLoad()
+        val opt = if (loadedLink == link) options?.firstOrNull { it.key == selected } else null
+        if (opt != null) Quality.remember(this, opt.key)
+        else Toast.makeText(this, if (failed) "Could not load the qualities. Downloading the best quality."
+            else "Downloading the best quality.", Toast.LENGTH_LONG).show()
+        startForegroundService(Intent(this, DownloadService::class.java).putExtra(DownloadService.EXTRA_URL, link)
+            .putExtra(DownloadService.EXTRA_FORMAT, opt?.format).putExtra(DownloadService.EXTRA_AUDIO, opt?.audio == true))
         render()
+    }
+
+    private fun cancelLoad() {
+        url.removeCallbacks(loader)
+        try { YoutubeDL.getInstance().destroyProcessById("formats-$loadSeq") } catch (_: Exception) {}
+        loadSeq++; loading = false
+    }
+
+    /** Ask yt-dlp what this video offers (runs after a link is pasted, and again when the link changes). */
+    private fun loadQualities() {
+        val link = urlRegex.find(url.text.toString())?.value
+        if (link == null) { cancelLoad(); loadedLink = null; options = null; failed = false; renderQuality(); return }
+        if (link == loadedLink || State.phase == State.Phase.RUNNING) return
+        cancelLoad()
+        options = null; failed = false; loading = true
+        if (!ready) { renderQuality(); return }   // starts again when the tools are ready
+        loadedLink = link
+        renderQuality()
+        val seq = loadSeq
+        thread {
+            val res = try { Quality.fetch(this, link, "formats-$seq") } catch (e: Exception) { null }
+            runOnUiThread {
+                if (seq != loadSeq) return@runOnUiThread
+                loading = false
+                options = res?.takeIf { it.isNotEmpty() }
+                failed = options == null
+                val want = Quality.remembered(this)
+                selected = if (options?.any { it.key == want } == true) want else "best"
+                renderQuality()
+            }
+        }
+    }
+
+    private fun renderQuality() {
+        val has = loading || options != null || failed
+        show(qCard, has)
+        qList.removeAllViews()
+        qNote.text = when {
+            loading -> if (ready) "Checking what this video offers…" else "Getting ready…"
+            failed -> "Could not load the qualities. Fetchly will download the best quality."
+            else -> ""
+        }
+        show(qNote, qNote.text.isNotEmpty())
+        options?.forEach { o ->
+            val on = o.key == selected
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                background = shape(col(if (on) R.color.tonal_bg else R.color.card), 14, if (on) 2 else 1, col(if (on) R.color.accent else R.color.border))
+                setOnClickListener { selected = o.key; renderQuality() }
+            }
+            row.addView(View(this).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    if (on) setColor(col(R.color.accent))
+                    setStroke(dp(2), col(if (on) R.color.accent else R.color.border))
+                }
+            }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(12) })
+            val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            names.addView(label(o.label, 16f, if (on) R.color.tonal_text else R.color.text, bold = true))
+            names.addView(label(o.detail, 13f, R.color.muted))
+            row.addView(names, LinearLayout.LayoutParams(0, -2, 1f))
+            o.size?.let { row.addView(label("~" + Quality.size(it), 14f, R.color.muted)) }
+            qList.add(row, if (qList.childCount == 0) 0 else 8)
+        }
     }
 
     private fun show(v: View, on: Boolean) { v.visibility = if (on) View.VISIBLE else View.GONE }
@@ -205,6 +310,10 @@ class MainActivity : Activity() {
                 }
             }
             else -> {}
+        }
+        if (err && !State.updateOffered && State.helpTopic in Tools.updateTopics && !Tools.updateSnoozed(this)) {
+            State.updateOffered = true
+            showUpdateDialog(true) { startDownload() }
         }
         show(sSub, sSub.text.isNotEmpty())
         show(logIn, login); show(importBtn, login); show(retry, retryMode)
