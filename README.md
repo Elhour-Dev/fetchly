@@ -44,7 +44,7 @@ License notices (ffmpeg is GPL v3, yt-dlp is Unlicense): see [THIRD_PARTY_NOTICE
 
 ## Download for Android
 
-1. On your phone, open the [Android release](https://github.com/Elhour-Dev/fetchly/releases/tag/v1.0.0-android) and download `Fetchly-1.0.0.apk`.
+1. On your phone, open the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchly-1.0.0.apk`.
 2. Open the file. Android will ask to allow installs from your browser or Files app. Allow it for this install.
 3. Share a video link to Fetchly, or paste it in the app. Videos save to your Downloads folder.
 4. Login problems? The app shows a **Log in** button. If the site blocks that, use **Import cookies.txt**. Open **Help** in the app for steps.
