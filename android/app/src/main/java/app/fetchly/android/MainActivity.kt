@@ -208,6 +208,7 @@ class MainActivity : Activity() {
         State.phase = State.Phase.RUNNING; State.text = "Fetching video info…"; State.percent = 0
         State.stage = State.Stage.FETCH; State.failedStage = null
         cancelLoad()
+        renderQuality()
         val opt = if (loadedLink == link) options?.firstOrNull { it.key == selected } else null
         if (opt != null) Quality.remember(this, opt.key)
         else Toast.makeText(this, if (failed) "Could not load the qualities. Downloading the best quality."
@@ -320,7 +321,7 @@ class MainActivity : Activity() {
                 else {
                     sTitle.text = State.errorShort
                     val at = State.failedStage?.let { "Failed while ${it.failedAt}." } ?: ""
-                    sSub.text = (if (login) "This site wants you to be logged in. Tap \"Log in\" and sign in; " +
+                    sSub.text = (if (login) "Tap \"Log in\" and sign in; " +
                         "Fetchly closes the page and retries by itself. If the site does not allow it, tap \"Import cookies.txt\". " else "") + at
                 }
             }
