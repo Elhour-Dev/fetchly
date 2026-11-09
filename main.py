@@ -17,6 +17,7 @@ import json
 import logging
 import mimetypes
 import os
+import random
 import re
 import secrets
 import importlib
@@ -1457,6 +1458,7 @@ async def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "version": APP_VERSION,
+        "playlists": bool(SAVE_DIR),
         "ffmpeg": {
             "available": bool(ffmpeg),
             "path": ffmpeg,
@@ -1732,6 +1734,334 @@ async def download_file(job_id: str) -> FileResponse:
         filename=job.download_name or path.name,
         headers={"Cache-Control": "private, no-store"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Playlists (desktop app only: videos are saved straight into a folder)
+# ---------------------------------------------------------------------------
+
+SAVE_DIR = Path(os.environ["FETCHLY_SAVE_DIR"]) if os.getenv("FETCHLY_SAVE_DIR") else None
+ARCHIVE_FILE = DATA_DIR / "downloaded.txt"   # one "site id" line per finished video
+PLAYLIST_PARALLEL = 3
+MIX_CAP = 50                                 # auto-generated Mix playlists never end
+_archive_lock = threading.Lock()
+_playlists: dict[str, "PlaylistRun"] = {}
+_PL_ACTIVE = {"queued", "starting", "downloading", "processing"}
+_PL_UNAVAILABLE_TITLES = {"[private video]": "Private video", "[deleted video]": "Deleted video"}
+_PL_SKIP_REASONS = (
+    ("private video", "Private video"),
+    ("members-only", "Members only"),
+    ("has been removed", "Removed video"),
+    ("deleted", "Deleted video"),
+    ("video unavailable", "Not available"),
+    ("not available", "Not available"),
+    ("geo", "Blocked in your region"),
+)
+
+
+def _skip_reason(raw: str) -> str | None:
+    low = raw.lower()
+    return next((reason for needle, reason in _PL_SKIP_REASONS if needle in low), None)
+
+
+def _archive_read() -> set[str]:
+    try:
+        return set(ARCHIVE_FILE.read_text(encoding="utf-8").splitlines())
+    except OSError:
+        return set()
+
+
+def _archive_add(key: str) -> None:
+    if not key:
+        return
+    with _archive_lock, contextlib.suppress(OSError):
+        if key not in _archive_read():
+            with ARCHIVE_FILE.open("a", encoding="utf-8") as fh:
+                fh.write(key + "\n")
+
+
+def extract_playlist_entries_sync(url: str) -> dict[str, Any]:
+    """Fast (flat) look at a playlist: one small entry per video, no per-video requests."""
+    from urllib.parse import parse_qs
+
+    is_mix = (parse_qs(urlsplit(url).query).get("list") or [""])[0].startswith("RD")
+    options = _base_ydl_options()
+    options.update({"noplaylist": False, "extract_flat": "in_playlist", "skip_download": True})
+    if is_mix:
+        options["playlistend"] = MIX_CAP
+    with yt_dlp.YoutubeDL(options) as ydl:
+        info = ydl.extract_info(url, download=False)
+    if not isinstance(info, dict):
+        info = {}
+    raw = [e for e in (info.get("entries") or []) if isinstance(e, dict)]
+    is_mix = is_mix or str(info.get("id") or "").startswith("RD")
+    if is_mix:
+        raw = raw[:MIX_CAP]
+    have = _archive_read()
+    entries: dict[int, dict[str, Any]] = {}
+    for n, e in enumerate(raw, 1):
+        link = e.get("url") or e.get("webpage_url")
+        if not isinstance(link, str) or not link.startswith(("http://", "https://")):
+            continue
+        vid = str(e.get("id") or "")
+        site = str(e.get("ie_key") or "").lower()
+        title = str(e.get("title") or f"Video {n}").strip()[:300]
+        thumb = None
+        if site == "youtube" and vid:
+            thumb = f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg"
+        else:
+            for cand in reversed(e.get("thumbnails") or []):
+                if isinstance(cand, dict) and str(cand.get("url") or "").startswith(("http://", "https://")):
+                    thumb = cand["url"]
+                    break
+        key = f"{site} {vid}" if site and vid else ""
+        entries[n] = {
+            "n": n, "url": link, "key": key, "title": title,
+            "duration": _coerce_float(e.get("duration")), "thumb": thumb,
+            "unavailable": _PL_UNAVAILABLE_TITLES.get(title.lower()),
+            "have": bool(key) and key in have,
+        }
+    if not entries:
+        raise FriendlyError("No videos were found in this playlist.", 422, "no_videos")
+    return {
+        "title": str(info.get("title") or "Playlist").strip()[:200],
+        "uploader": str(info.get("uploader") or info.get("channel") or "")[:150],
+        "capped": is_mix,
+        "entries": entries,
+    }
+
+
+class PlaylistRun:
+    """One playlist: its videos and the download queue (a few worker threads)."""
+
+    def __init__(self, title: str, entries: dict[int, dict[str, Any]]):
+        self.id = str(uuid.uuid4())
+        self.title = title
+        self.entries = entries
+        self.items: dict[int, dict[str, Any]] = {}
+        self.quality = "best"
+        self.folder: Path | None = None
+        self.lock = threading.Lock()
+        self.workers = 0
+        self.first = True
+
+    def active(self) -> bool:
+        return any(i["state"] in _PL_ACTIVE for i in self.items.values())
+
+    def start(self, numbers: list[int], quality: str) -> None:
+        assert SAVE_DIR is not None
+        self.quality = quality
+        self.folder = SAVE_DIR / sanitize_filename(self.title, fallback="Playlist", max_length=80)
+        self.folder.mkdir(parents=True, exist_ok=True)
+        have = _archive_read()
+        with self.lock:
+            self.items = {}
+            for n in sorted(set(numbers)):
+                entry = self.entries.get(n)
+                if not entry:
+                    continue
+                reason = entry["unavailable"] or ("Already downloaded" if entry["key"] and entry["key"] in have else None)
+                self.items[n] = {"n": n, "state": "skipped" if reason else "queued", "percent": 0.0,
+                                 "speed": None, "error": reason, "stop": None}
+        self._kick()
+
+    def _kick(self) -> None:
+        with self.lock:
+            queued = sum(1 for i in self.items.values() if i["state"] == "queued")
+            while self.workers < min(PLAYLIST_PARALLEL, queued):
+                self.workers += 1
+                threading.Thread(target=self._worker, daemon=True).start()
+
+    def _worker(self) -> None:
+        while True:
+            with self.lock:
+                item = next((i for _, i in sorted(self.items.items()) if i["state"] == "queued"), None)
+                if item is None:
+                    self.workers -= 1
+                    return
+                item.update(state="starting", stop=None, error=None, speed=None)
+                # A small random pause between requests, so the site is not hammered.
+                wait = 0.0 if self.first else random.uniform(1.0, 3.0)
+                self.first = False
+            time.sleep(wait)
+            try:
+                self._download(item)
+            except Exception:  # never let a worker die silently
+                logger.exception("Playlist worker error")
+                item.update(state="failed", error="Something went wrong. Try again.")
+
+    def _stem(self, n: int) -> str:
+        return f"{n:03d} - " + sanitize_filename(self.entries[n]["title"], fallback="video", max_length=80)
+
+    def _remove_partial(self, n: int) -> None:
+        if not self.folder:
+            return
+        import glob as _glob
+        for path in self.folder.glob(_glob.escape(self._stem(n)) + ".*"):
+            with contextlib.suppress(OSError):
+                path.unlink()
+
+    def _download(self, item: dict[str, Any]) -> None:
+        n = item["n"]
+        entry = self.entries[n]
+
+        def check() -> None:
+            if item["stop"]:
+                raise yt_dlp.utils.DownloadCancelled(item["stop"])
+
+        def hook(data: dict[str, Any]) -> None:
+            check()
+            if data.get("status") == "downloading":
+                total = _coerce_int(data.get("total_bytes")) or _coerce_int(data.get("total_bytes_estimate"))
+                done = _coerce_int(data.get("downloaded_bytes")) or 0
+                percent = min(99.9, done / total * 100.0) if total else item["percent"]
+                item.update(state="downloading", percent=round(percent, 1), speed=_coerce_float(data.get("speed")))
+            elif data.get("status") == "finished":
+                item.update(state="processing", speed=None)
+
+        options = _base_ydl_options()
+        options.update({
+            "format": _format_selector(self.quality),
+            "outtmpl": str(self.folder / (self._stem(n).replace("%", "%%") + ".%(ext)s")),
+            "noplaylist": True,
+            "merge_output_format": "mp4",
+            "continuedl": True,
+            "noprogress": True,
+            "progress_hooks": [hook],
+            "windowsfilenames": True,
+            "extractor_args": {"youtube": {"player_client": ["android", "ios", "web_embedded", "tv_samsung", "web"]}},
+        })
+        if self.quality == "audio":
+            options["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]
+
+        outcome = "done"
+        try:
+            check()
+            with yt_dlp.YoutubeDL(options) as ydl:
+                info = ydl.extract_info(entry["url"], download=True)
+            _archive_add(entry["key"])
+            if isinstance(info, dict) and info.get("extractor_key") and info.get("id"):
+                _archive_add(f"{str(info['extractor_key']).lower()} {info['id']}")
+            item.update(state="done", percent=100.0, error=None)
+        except yt_dlp.utils.DownloadCancelled:
+            outcome = item["stop"] or "cancel"
+        except Exception as exc:
+            raw = _strip_ansi(str(exc))
+            reason = _skip_reason(raw)
+            item.update(state="skipped" if reason else "failed", error=reason or friendly_ytdlp_error(exc))
+            logger.info("Playlist item %s: %s", n, raw[:200])
+        if outcome == "pause":
+            item.update(state="paused")
+        elif outcome == "cancel":
+            self._remove_partial(n)
+            item.update(state="cancelled", percent=0.0)
+        item.update(stop=None, speed=None)
+
+    def action(self, name: str, n: int | None) -> None:
+        with self.lock:
+            if n is not None and n not in self.items:
+                raise HTTPException(status_code=404, detail="That video is not in the queue.")
+            for item in ([self.items[n]] if n is not None else list(self.items.values())):
+                state = item["state"]
+                busy = state in {"starting", "downloading"}
+                if name == "pause":
+                    if state == "queued":
+                        item["state"] = "paused"
+                    elif busy:
+                        item["stop"] = "pause"
+                elif name == "resume" and state == "paused":
+                    item["state"] = "queued"
+                elif name == "cancel":
+                    if state in {"queued", "paused"}:
+                        self._remove_partial(item["n"])
+                        item.update(state="cancelled", percent=0.0)
+                    elif busy:
+                        item["stop"] = "cancel"
+                elif name == "retry" and state in {"failed", "cancelled"}:
+                    item.update(state="queued", error=None)
+        self._kick()
+
+    def status(self) -> dict[str, Any]:
+        with self.lock:
+            items = [{k: i[k] for k in ("n", "state", "percent", "speed", "error")} for _, i in sorted(self.items.items())]
+        return {"id": self.id, "folder": str(self.folder or ""), "running": self.active(), "items": items}
+
+
+class PlaylistStartRequest(BaseModel):
+    items: list[int] = Field(min_length=1, max_length=10000)
+    quality: str = Field(min_length=1, max_length=16)
+
+
+class PlaylistActionRequest(BaseModel):
+    action: str = Field(pattern="^(pause|resume|cancel|retry)$")
+    n: int | None = None
+
+
+def _playlist_or_404(request: Request, playlist_id: str | None = None) -> PlaylistRun | None:
+    host = request.client.host if request.client else ""
+    if not SAVE_DIR or host not in {"127.0.0.1", "::1", "localhost"}:
+        raise FriendlyError("Playlist lists only work in the Fetchy desktop app.", 403, "desktop_only")
+    if playlist_id is None:
+        return None
+    run = _playlists.get(playlist_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="This playlist is no longer open. Fetch it again.")
+    return run
+
+
+@app.post("/api/playlist/info")
+async def playlist_info(payload: UrlRequest, request: Request) -> dict[str, Any]:
+    _playlist_or_404(request)
+    url = await ensure_public_url(payload.url)
+    try:
+        info = await asyncio.wait_for(asyncio.to_thread(extract_playlist_entries_sync, url), timeout=240)
+    except asyncio.TimeoutError:
+        raise FriendlyError("The playlist took too long to load. Try again.", 504, "timeout") from None
+    except FriendlyError:
+        raise
+    except Exception as exc:
+        raise FriendlyError(friendly_ytdlp_error(exc) if "playlist" not in str(exc).lower()
+                            else "Could not read this playlist. It may be private or empty.",
+                            422, "playlist_failed", detail=_strip_ansi(str(exc)).strip()[:1500]) from None
+    for old_id in [k for k, v in _playlists.items() if not v.active()]:
+        _playlists.pop(old_id, None)
+    run = PlaylistRun(info["title"], info["entries"])
+    _playlists[run.id] = run
+    public = ("n", "title", "duration", "thumb", "unavailable", "have")
+    return {
+        "id": run.id, "title": run.title, "uploader": info["uploader"], "capped": info["capped"],
+        "cap": MIX_CAP, "entries": [{k: e[k] for k in public} for e in info["entries"].values()],
+    }
+
+
+@app.post("/api/playlist/{playlist_id}/start")
+async def playlist_start(playlist_id: str, payload: PlaylistStartRequest, request: Request) -> dict[str, Any]:
+    run = _playlist_or_404(request, playlist_id)
+    if run.active():
+        raise HTTPException(status_code=409, detail="This playlist is already downloading.")
+    _format_selector(payload.quality)
+    await asyncio.to_thread(run.start, payload.items, payload.quality)
+    return run.status()
+
+
+@app.get("/api/playlist/{playlist_id}/status")
+async def playlist_status(playlist_id: str, request: Request) -> dict[str, Any]:
+    return _playlist_or_404(request, playlist_id).status()
+
+
+@app.post("/api/playlist/{playlist_id}/action")
+async def playlist_action(playlist_id: str, payload: PlaylistActionRequest, request: Request) -> dict[str, Any]:
+    run = _playlist_or_404(request, playlist_id)
+    await asyncio.to_thread(run.action, payload.action, payload.n)
+    return run.status()
+
+
+@app.post("/api/playlist/{playlist_id}/open")
+async def playlist_open(playlist_id: str, request: Request) -> dict[str, Any]:
+    run = _playlist_or_404(request, playlist_id)
+    if run.folder and run.folder.is_dir() and hasattr(os, "startfile"):
+        os.startfile(str(run.folder))  # noqa: S606 - our own folder inside Downloads
+    return {"ok": True}
 
 
 if __name__ == "__main__":

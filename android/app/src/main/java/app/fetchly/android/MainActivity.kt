@@ -38,7 +38,7 @@ class MainActivity : ThemedActivity() {
     private val urlRegex = Regex("https?://\\S+")
 
     // Quality picker
-    private lateinit var playlist: android.widget.CheckBox
+    private var singleFor: String? = null   // a video+playlist link where "This video only" was chosen
     private lateinit var qCard: LinearLayout
     private lateinit var qNote: TextView
     private lateinit var qList: LinearLayout
@@ -85,11 +85,6 @@ class MainActivity : ThemedActivity() {
         small.addView(button("Clear", Kind.GHOST, 44) { url.setText("") }, LinearLayout.LayoutParams(0, dp(44), 1f))
         box.add(small, 10)
 
-        playlist = android.widget.CheckBox(this).apply {
-            text = "Download the whole playlist"; setTextColor(col(R.color.text)); visibility = View.GONE
-        }
-        box.add(playlist, 10)
-
         qCard = card().apply { visibility = View.GONE }
         qCard.addView(label("Quality", 13f, R.color.muted, bold = true))
         qNote = label("", 14f, R.color.muted)
@@ -100,12 +95,7 @@ class MainActivity : ThemedActivity() {
         url.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                val t = s.toString()
-                val isList = t.contains("list=") || t.contains("/playlist")
-                playlist.visibility = if (isList) View.VISIBLE else View.GONE
-                if (!isList) playlist.isChecked = false
-                url.removeCallbacks(loader); url.postDelayed(loader, 500) }
+            override fun afterTextChanged(s: android.text.Editable?) { url.removeCallbacks(loader); url.postDelayed(loader, 500) }
         })
 
         download = button("Download", Kind.PRIMARY, 64) { startDownload() }.apply { textSize = 19f }
@@ -207,6 +197,15 @@ class MainActivity : ThemedActivity() {
     private fun startDownload() {
         val link = urlRegex.find(url.text.toString())?.value
         if (link == null) { Toast.makeText(this, "Please paste a link that starts with http:// or https://", Toast.LENGTH_LONG).show(); return }
+        // Playlist links open the playlist screen. A link with a video and a list asks first.
+        if (Pl.isList(link) && link != singleFor) {
+            val open = { startActivity(Intent(this, PlaylistActivity::class.java).putExtra("url", link)) }
+            if (!Pl.hasVideo(link)) open()
+            else android.app.AlertDialog.Builder(this).setTitle("This link has a video and a playlist.")
+                .setItems(arrayOf("This video only", "Whole playlist")) { _, i -> if (i == 0) { singleFor = link; startDownload() } else open() }
+                .show()
+            return
+        }
         if (State.phase == State.Phase.RUNNING) return
         if (!ready) {
             pendingStart = true
@@ -223,14 +222,13 @@ class MainActivity : ThemedActivity() {
         State.stage = State.Stage.FETCH; State.failedStage = null
         cancelLoad()
         renderQuality()
-        val whole = playlist.isChecked
-        val opt = if (loadedLink == link && !whole) options?.firstOrNull { it.key == selected } else null
+        val opt = if (loadedLink == link) options?.firstOrNull { it.key == selected } else null
         if (opt != null) Quality.remember(this, opt.key)
         else Toast.makeText(this, if (failed) "Could not load the qualities. Downloading the best quality."
             else "Downloading the best quality.", Toast.LENGTH_LONG).show()
         startForegroundService(Intent(this, DownloadService::class.java).putExtra(DownloadService.EXTRA_URL, link)
             .putExtra(DownloadService.EXTRA_FORMAT, opt?.format).putExtra(DownloadService.EXTRA_AUDIO, opt?.audio == true)
-            .putExtra(DownloadService.EXTRA_USE_INFO, opt != null).putExtra(DownloadService.EXTRA_PLAYLIST, whole))
+            .putExtra(DownloadService.EXTRA_USE_INFO, opt != null))
         render()
     }
 
@@ -243,7 +241,8 @@ class MainActivity : ThemedActivity() {
     /** Ask yt-dlp what this video offers (runs after a link is pasted, and again when the link changes). */
     private fun loadQualities() {
         val link = urlRegex.find(url.text.toString())?.value
-        if (link == null) { cancelLoad(); loadedLink = null; options = null; failed = false; renderQuality(); return }
+        // A pure playlist link has its own screen with its own quality choice.
+        if (link == null || (Pl.isList(link) && !Pl.hasVideo(link))) { cancelLoad(); loadedLink = null; options = null; failed = false; renderQuality(); return }
         if (link == loadedLink || State.phase == State.Phase.RUNNING) return
         cancelLoad()
         options = null; failed = false; loading = true

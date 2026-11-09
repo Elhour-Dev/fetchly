@@ -15,6 +15,9 @@ class HelpActivity : ThemedActivity() {
         box.add(topBar("Help"))
         box.add(label("Tap a card to open it. Each problem says what you see, why it happens, and how to fix it.", 15f, R.color.muted), 14)
         box.add(label(Help.COOKIE_NOTE, 15f, R.color.text, bold = true), 8)
+        box.add(label("Playlists: paste a playlist link, tick the videos you want, pick one quality, then tap Download.\n" +
+            "They are saved in Downloads, in a folder named after the playlist, with a number in front of each name.\n" +
+            "Videos you already have, and private or deleted ones, are skipped. Use \"Retry failed\" at the end.", 14f, R.color.muted), 8)
 
         val want = intent.getStringExtra("topic")
         var target: View? = null

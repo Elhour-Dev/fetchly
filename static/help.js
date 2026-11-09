@@ -281,6 +281,10 @@
 
     var body = el('div', { 'class': 'fhBody' });
     body.appendChild(el('p', { 'class': 'fhNote', text: COOKIE_NOTE }));
+    ['Playlists: paste a playlist link, tick the videos you want, pick one quality, then press Download.',
+      'They are saved in Downloads, in a folder named after the playlist, with a number in front of each name.',
+      'Videos you already have, and private or deleted ones, are skipped. Use "Retry failed" at the end.'
+    ].forEach(function (line) { body.appendChild(el('p', { style: 'margin:0;font-size:13.5px;color:var(--muted)', text: line })); });
     CARDS.forEach(function (c) { body.appendChild(buildCard(c)); });
     body.appendChild(buildCookies());
 

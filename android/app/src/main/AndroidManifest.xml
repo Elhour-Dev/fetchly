@@ -44,7 +44,12 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity android:name=".PlaylistActivity" android:exported="false" android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize" />
+
         <service android:name=".DownloadService" android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <service android:name=".PlaylistService" android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

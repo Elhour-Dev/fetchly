@@ -52,6 +52,11 @@ object Quality {
         return options(info)
     }
 
+    /** The choices for a whole playlist: one quality for every video (sizes are not known up front). */
+    fun playlistOptions() = listOf(QOption("best", "Best quality", "", null, BEST, false)) +
+        tiers.map { QOption(it.toString(), "${it}p", "", null, best(it), false) } +
+        QOption("audio", "Audio only (MP3)", "", null, AUDIO_FORMAT, true)
+
     /** The saved answer of the last [fetch] (may not exist). */
     fun infoFile(ctx: Context) = java.io.File(ctx.cacheDir, "info.json")
 

@@ -394,6 +394,8 @@
     els.videoSkeleton.hidden = phase !== 'fetching';
     els.videoErrorCard.hidden = phase !== 'error';
     els.videoResult.hidden = !showResult;
+    const playlistPanel = $('playlistPanel');
+    if (playlistPanel) playlistPanel.hidden = phase !== 'playlist';
 
     if (showResult) {
       els.videoQualityBlock.hidden = phase !== 'ready';
@@ -528,6 +530,14 @@
     }
     if (value !== els.videoUrl.value.trim()) els.videoUrl.value = value;
     clearFieldError(els.videoUrl, els.videoUrlError);
+
+    // Desktop app: playlist links open the playlist list instead (static/playlist.js).
+    const playlists = state.health?.playlists && window.FetchyPlaylist;
+    if (playlists && playlists.busy()) {
+      toast('A playlist is still downloading. Wait for it, or cancel it first.', 'info');
+      return;
+    }
+    if (playlists && !event.singleVideo && playlists.open(value, () => handleVideoSubmit({ preventDefault() {}, singleVideo: true }))) return;
 
     closeVideoStream();
     state.video.terminal = false;
@@ -739,7 +749,7 @@
     setupTheme();
     setupUrlField(els.videoUrl, els.videoPaste, els.videoClear, els.videoUrlError);
     const syncPlaylist = () => {
-      const isList = /[?&]list=/.test(els.videoUrl.value) || /\/playlist/.test(els.videoUrl.value);
+      const isList = !state.health?.playlists && (/[?&]list=/.test(els.videoUrl.value) || /\/playlist/.test(els.videoUrl.value));
       els.videoPlaylistRow.classList.toggle('hidden', !isList);
       els.videoPlaylistRow.classList.toggle('flex', isList);
       if (!isList) els.videoPlaylist.checked = false;
@@ -758,6 +768,9 @@
     updateFetchButtons();
     loadHealth();
   }
+
+  // Shared with static/playlist.js.
+  window.Fetchy = { api, toast, formatBytes, formatDuration, setVideoPhase, setButtonLoading, fetchButton: els.videoFetch };
 
   init();
 })();

@@ -67,6 +67,7 @@ async function start() {
       ...process.env,
       HOST: '127.0.0.1', PORT: String(port),
       FETCHLY_DATA_DIR: dataDir, FETCHLY_TOOLS_DIR: toolsDir,
+      FETCHLY_SAVE_DIR: app.getPath('downloads'),   // playlists are saved here, in a folder per playlist
       PATH: ffmpegDir + path.delimiter + process.env.PATH,
       PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1',
     },
