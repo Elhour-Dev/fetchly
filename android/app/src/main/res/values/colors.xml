@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same palette as the web app: slate neutrals, indigo accent. -->
+<resources>
+    <color name="bg">#F8FAFC</color>
+    <color name="card">#FFFFFF</color>
+    <color name="border">#E2E8F0</color>
+    <color name="text">#0F172A</color>
+    <color name="muted">#64748B</color>
+    <color name="accent">#4F46E5</color>
+    <color name="on_accent">#FFFFFF</color>
+    <color name="tonal_bg">#EEF2FF</color>
+    <color name="tonal_text">#4338CA</color>
+    <color name="track">#E2E8F0</color>
+    <color name="err_bg">#FFF1F2</color>
+    <color name="err_border">#FECDD3</color>
+    <color name="err_text">#9F1239</color>
+    <color name="ok_bg">#ECFDF5</color>
+    <color name="ok_border">#A7F3D0</color>
+    <color name="ok_text">#065F46</color>
+    <color name="tip_bg">#FFFBEB</color>
+    <color name="tip_border">#FDE68A</color>
+    <color name="tip_text">#92400E</color>
+</resources>

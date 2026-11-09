@@ -1,110 +1,156 @@
 package app.fetchly.android
 
-class Topic(
-    val id: String, val title: String, val simple: String, val match: Regex,
-    val why: String, val fix: List<String>
+/** One problem: what you see, why it happens, how to fix it. `simple` is the one-line message shown on the error card. */
+class Problem(
+    val id: String, val title: String, val simple: String, val match: Regex?,
+    val see: String, val why: String, val fix: List<String>,
+    val login: Boolean = false, val site: String? = null
 )
 
+class HelpCard(val id: String, val title: String, val subtitle: String, val tip: Boolean, val problems: List<Problem>)
+
 object Help {
+    const val TIP = "Use a secondary account, not your main one. It's safer for your main account if the site flags the login. " +
+        "It lowers the risk, it doesn't remove it."
+    const val COOKIE_NOTE = "Cookies are like a password. Never share them."
+
     private fun r(s: String) = Regex(s, RegexOption.IGNORE_CASE)
 
-    val topics = listOf(
-        Topic("bot", "YouTube says \"Sign in to confirm you're not a bot\"",
-            "YouTube thinks this is a bot and blocked the download.",
-            r("not a bot|confirm you.?re not"),
-            "YouTube blocks requests it does not trust. This is common on VPNs and busy networks.",
+    private val yt = HelpCard("youtube", "YouTube", "Bot check, video unavailable", true, listOf(
+        Problem("yt_bot", "\"Sign in to confirm you're not a bot\"",
+            "YouTube thinks this is a bot and blocked the download.", r("not a bot|confirm you.?re not"),
+            "YouTube asks you to sign in to prove you are not a bot.",
+            "YouTube blocks requests it does not trust. VPNs and busy networks make it worse.",
             listOf(
-                "Tap \"Update tools\" on the main screen.",
-                "Turn off any VPN and try again (Wi-Fi or mobile data).",
-                "On a computer, log in to YouTube in a private window, export a cookies.txt file (Netscape format) with a cookies extension, and copy the file to your phone.",
-                "On the main screen tap \"Import cookies.txt\" and pick that file. Then try the link again.",
-                "Keep cookies.txt private. It holds your login. Never share it.",
-                "Warning: using your main Google account can get it limited. A spare account is safer."
-            )),
-        Topic("login", "Instagram and other sites that need a login",
+                "If a VPN or proxy is on, turn it off. Or set it to \"direct\" for Fetchly.",
+                "Tap \"Log in\". If Google says the app is not allowed, tap \"Import cookies.txt\" instead.",
+                "For the file: log in to YouTube on a computer, export cookies.txt with a cookies extension, and copy it to your phone's Downloads.",
+                "Tap \"Retry\"."
+            ), login = true, site = "youtube"),
+        Problem("yt_unavail", "Video unavailable",
+            "This video is private, removed, blocked in your country, or needs an adult account.",
+            r("video unavailable|age[- ]restrict|confirm your age|inappropriate|has been terminated|country|geo[- ]?(restrict|block)|your region|not available in your|blocked it in your"),
+            "\"Video unavailable\", \"Private video\" or \"not available in your country\".",
+            "The owner hid or removed it, it is blocked where you are, or it needs a logged-in adult.",
+            listOf(
+                "Open the link in your phone browser. If it does not play there, Fetchly cannot get it.",
+                "Age limit: tap \"Log in\" or \"Import cookies.txt\" with an adult account, then \"Retry\".",
+                "Blocked in your country: a VPN may help, but it can also trigger the bot check.",
+                "Removed or private: only the owner can fix that."
+            ), login = true, site = "youtube")
+    ))
+
+    private val ig = HelpCard("instagram", "Instagram", "Login required, empty result, private post", true, listOf(
+        Problem("ig_login", "Login required",
             "This site wants you to be logged in.",
-            r("log ?in|sign ?in|login required|authenticat|cookies|rate-limit|empty media response|requires an account|members?[- ]only|need to log"),
-            "The site only shows this content to signed-in users.",
+            r("log ?in|sign ?in|login required|authenticat|cookies|rate-limit|requires an account|members?[- ]only|need to log"),
+            "\"Login required\", \"Instagram needs a login\" or \"rate-limit reached\". Other sites can say the same.",
+            "The site only shows this to logged-in people.",
             listOf(
-                "On a computer, log in to the site in your browser.",
-                "Export a cookies.txt file (Netscape format) with a cookies extension and copy it to your phone.",
-                "On the main screen tap \"Import cookies.txt\" and pick the file.",
-                "Try the link again. Public Instagram posts shared from the Instagram app may work without cookies.",
-                "Warning: automated use of your main account can get it blocked. Use a spare account."
-            )),
-        Topic("private", "Private, deleted or age-restricted video",
-            "This video is private, removed, or needs an adult account.",
-            r("private|deleted|removed|no longer available|age[- ]restrict|confirm your age|inappropriate|video unavailable|has been terminated"),
-            "The owner hid or deleted it, or the site wants a signed-in adult account.",
+                "Tap \"Log in\" and sign in on the site's page. Then tap \"Done\".",
+                "Tap \"Retry\".",
+                "No login page, or it is blocked? Tap \"Import cookies.txt\" and pick the file from Downloads."
+            ), login = true, site = "instagram"),
+        Problem("ig_empty", "Empty result",
+            "The site sent back nothing.",
+            r("empty media response|no video in this post|there is no video"),
+            "\"Empty media response\", or no video found in a post.",
+            "You are probably not logged in, or the post has only photos.",
             listOf(
-                "Open the link in your phone browser. If you cannot watch it there, Fetchly cannot download it.",
-                "Private video: only the owner can allow access.",
-                "Deleted video: it is gone.",
-                "Age-restricted: import cookies from a logged-in adult account (see the YouTube topic)."
-            )),
-        Topic("country", "\"Video not available in your country\"",
-            "This video is blocked in your country.",
-            r("country|geo[- ]?(restrict|block)|your region|not available in your|blocked it in your"),
-            "The owner limited the video to some countries.",
+                "Tap \"Log in\" (or \"Import cookies.txt\"), then \"Retry\".",
+                "Check that the post is a video or a Reel.",
+                "Wait a few minutes and try again."
+            ), login = true, site = "instagram"),
+        Problem("ig_private", "Private or deleted post",
+            "This post is private or was removed.",
+            r("private|deleted|removed|no longer available|content is not available"),
+            "\"This content is not available\", \"private\" or \"deleted\".",
+            "The owner made it private or deleted it.",
             listOf(
-                "Check that the video plays in your phone browser.",
-                "A VPN can change your country, but VPNs can also cause YouTube bot errors."
-            )),
-        Topic("unsupported", "Link not supported, or not a video",
+                "Open the link in your phone browser. If you cannot see it there, Fetchly cannot either.",
+                "Private: log in with an account that may see it (tap \"Log in\"), then \"Retry\".",
+                "Deleted: it is gone for good."
+            ), login = true, site = "instagram")
+    ))
+
+    private val general = HelpCard("general", "General", "Sound, speed, links, tools, files", false, listOf(
+        Problem("g_unsupported", "Link not supported",
             "This link is not a video Fetchly can download.",
             r("unsupported url|not supported|no video|videos only|could not find|no media|not a valid|invalid url|no supported"),
-            "Fetchly downloads videos only. Photos, pages without video and some sites are not supported.",
+            "\"Unsupported URL\" or \"No video found\".",
+            "The link is not a video page, is cut off, or the site is not supported.",
             listOf(
-                "Copy the link of the video itself (use the Share button of the video).",
-                "Make sure the link starts with http:// or https://.",
-                "Tap \"Update tools\" in case the site changed."
+                "Copy the link of the video itself. Use the video's Share button.",
+                "Paste the whole link. It starts with https://",
+                "Photos do not work. Fetchly downloads videos.",
+                "Open Settings, tap \"Update tools\", then try again."
             )),
-        Topic("ffmpeg", "A video with no sound, or a merge error",
+        Problem("g_ffmpeg", "No sound, or ffmpeg missing",
             "The video and sound could not be joined.",
             r("ffmpeg|ffprobe|postprocess|merg(e|ing)|no audio|no sound"),
+            "The video has no sound, or an error names ffmpeg.",
             "Many sites keep video and sound apart. Fetchly joins them with ffmpeg.",
             listOf(
-                "Try the download again.",
+                "Tap \"Retry\".",
                 "Free some storage space on your phone.",
-                "Reinstall Fetchly if it keeps happening."
+                "Open Settings and tap \"Update tools\".",
+                "Still broken? Reinstall Fetchly."
             )),
-        Topic("network", "Slow or failing downloads, network errors",
+        Problem("g_network", "Slow or failed download",
             "The connection failed or timed out.",
             r("timed out|timeout|too long|connection|proxy|ssl|certificate|network|failed to fetch|unreachable|429|too many requests|temporar|resolve"),
-            "The network dropped, is slow, or the site is limiting you.",
+            "The download is very slow, stops, times out, or says \"too many requests\" (429).",
+            "Weak connection, a VPN, or the site is limiting you.",
             listOf(
-                "Check that Wi-Fi or mobile data works.",
-                "Turn off VPN or Private DNS and try again.",
-                "Wait a few minutes if you see \"too many requests\" (429)."
+                "Check that Wi-Fi or mobile data works in your browser.",
+                "Turn off VPN and Private DNS, then tap \"Retry\".",
+                "\"Too many requests\": wait a few minutes.",
+                "Try the other network (Wi-Fi or mobile data)."
             )),
-        Topic("update", "The tools are outdated: tap \"Update tools\"",
+        Problem("g_update", "Outdated tools",
             "yt-dlp is probably out of date.",
             r("unable to extract|update yt-dlp|outdated|nsig|signature|extractor error|please report this issue|sabr|player response"),
-            "Sites change often. yt-dlp must be new to keep working.",
+            "\"Unable to extract\" or \"please update yt-dlp\".",
+            "Sites change often. Old tools stop working.",
             listOf(
-                "Tap \"Update tools\" on the main screen and wait for the new version.",
-                "Try the link again.",
-                "If the update fails, the old version keeps working."
+                "Open Settings and tap \"Update tools\".",
+                "Wait until the new version number shows.",
+                "Go back and tap \"Retry\". If the update fails, the old version keeps working."
             )),
-        Topic("format", "\"Format not available\"",
+        Problem("g_format", "\"Format not available\"",
             "No matching video format was found.",
             r("format.{0,20}(is )?not available|requested format|no such format|no formats"),
-            "The site did not give a format Fetchly can use.",
+            "\"Requested format is not available\".",
+            "The site gave no video and sound mix that Fetchly can use. Often it needs a login.",
             listOf(
-                "Tap \"Update tools\" and try again.",
-                "Some videos need a login: see the login topic."
+                "Open Settings and tap \"Update tools\".",
+                "Log in or import cookies (see the Instagram or YouTube card).",
+                "Tap \"Retry\"."
             )),
-        Topic("storage", "Where are my videos? Notifications?",
-            "",
-            Regex("(?!)"),
-            "Fetchly saves finished videos to the phone's Downloads folder.",
+        Problem("g_storage", "File not found in Downloads",
+            "", null,
+            "The box says Done, but you cannot find the video.",
+            "Fetchly saves finished videos in your phone's Downloads folder.",
             listOf(
-                "Open the Files (My Files) app, then Downloads.",
-                "Android 13 and newer: allow Notifications for Fetchly to see download progress. Downloads work without it.",
-                "You can share a link from YouTube, Instagram and others: tap Share, then Fetchly."
+                "Open the Files (or My Files) app, then Downloads.",
+                "Look for the name shown in the green box.",
+                "Android 13 and newer: allow Notifications for Fetchly to see progress. Downloads work without it."
             ))
-    )
+    ))
 
-    // Order matters: the most specific topics come first.
-    fun find(error: String): Topic? = topics.firstOrNull { it.match.containsMatchIn(error) }
+    val cards = listOf(ig, yt, general)
+
+    // Order matters: the first match wins. Site-specific problems are tried first for that site's links.
+    private val order = listOf("yt_bot", "ig_login", "ig_empty", "yt_unavail", "ig_private",
+        "g_unsupported", "g_ffmpeg", "g_network", "g_update", "g_format")
+    private val all = order.map { id -> cards.flatMap { it.problems }.first { it.id == id } }
+
+    fun cardOf(problemId: String?) = cards.firstOrNull { c -> c.problems.any { it.id == problemId } }
+
+    fun find(error: String, link: String): Problem? {
+        val base = Cookies.baseDomain(Cookies.hostOf(link))
+        val site = when (base) { "instagram.com" -> "instagram"; "youtube.com", "youtu.be" -> "youtube"; else -> null }
+        val first = all.filter { it.site == null || it.site == site }
+        return (first + all).firstOrNull { it.match?.containsMatchIn(error) == true }
+    }
 }

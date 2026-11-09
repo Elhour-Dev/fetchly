@@ -51,6 +51,7 @@ class DownloadService : Service() {
         cancelled = false
         State.phase = State.Phase.RUNNING
         State.percent = 0
+        State.failedUrl = url
         State.text = "Getting ready…"
         State.changed()
         thread { work(url) }
@@ -99,10 +100,11 @@ class DownloadService : Service() {
                 State.phase = State.Phase.IDLE; State.text = "Cancelled."
             } else {
                 val raw = (e.message ?: e.toString()).trim()
-                val topic = Help.find(raw)
+                val topic = Help.find(raw, url)
                 State.phase = State.Phase.ERROR
                 State.helpTopic = topic?.id
-                State.errorShort = topic?.simple ?: "The download did not work."
+                State.needsLogin = topic?.login == true
+                State.errorShort = topic?.simple?.ifEmpty { null } ?: "The download did not work."
                 State.errorDetails = raw
                 State.text = ""
                 notifyDone("Download failed", State.errorShort)

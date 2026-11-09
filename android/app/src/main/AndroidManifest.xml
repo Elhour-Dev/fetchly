@@ -28,6 +28,10 @@
         </activity>
 
         <activity android:name=".HelpActivity" android:exported="false" />
+        <activity android:name=".SettingsActivity" android:exported="false" />
+        <activity android:name=".LoginActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
 
         <service android:name=".DownloadService" android:exported="false"
             android:foregroundServiceType="dataSync" />
