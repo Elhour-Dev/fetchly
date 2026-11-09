@@ -20,6 +20,8 @@ object State {
     @Volatile var needsLogin = false
     @Volatile var failedUrl = ""
     @Volatile var cookiesSaved = false   // true after a login or import; the error card then offers "Retry"
+    @Volatile var updateOffered = false  // the update pop-up was already shown for the current error
+    @Volatile var startupChecked = false // the "tools are old" check runs once per app start
     @Volatile var listener: (() -> Unit)? = null
 
     private val main = Handler(Looper.getMainLooper())
@@ -47,6 +49,52 @@ object Tools {
     }
 
     fun cookiesFile(ctx: Context) = java.io.File(ctx.filesDir, "cookies.txt")
+
+    class UpdateResult(val ok: Boolean, val message: String, val version: String)
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+
+    /** Update yt-dlp. Keeps the old version if the new one does not work. Call on a background thread. */
+    fun update(ctx: Context): UpdateResult {
+        val dir = java.io.File(ctx.noBackupFilesDir, "youtubedl-android/yt-dlp")
+        val backup = java.io.File(ctx.noBackupFilesDir, "yt-dlp-backup")
+        try {
+            init(ctx)
+            val before = version(ctx)
+            backup.deleteRecursively()
+            if (dir.exists()) dir.copyRecursively(backup, true)
+            val r = YoutubeDL.getInstance().updateYoutubeDL(ctx.applicationContext, YoutubeDL.UpdateChannel.STABLE)
+            val after = version(ctx)
+            if (after == "unknown") throw IllegalStateException("New version did not start")
+            prefs(ctx).edit().putLong("last_update", System.currentTimeMillis()).apply()
+            val msg = if (r == YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE) "Already the newest version: yt-dlp $after"
+            else "Updated: yt-dlp $before to $after"
+            return UpdateResult(true, msg, after)
+        } catch (e: Exception) {
+            try { if (backup.exists()) { dir.deleteRecursively(); backup.copyRecursively(dir, true) } } catch (_: Exception) {}
+            val v = version(ctx)
+            return UpdateResult(false, "Update failed. Old version kept: yt-dlp $v\n(" + (e.message ?: e.toString()).take(200) + ")", v)
+        } finally {
+            backup.deleteRecursively()
+        }
+    }
+
+    // When to offer the update pop-up. It never updates by itself.
+    private const val WEEK = 7L * 24 * 3600 * 1000
+    private const val DAY = 24L * 3600 * 1000
+
+    /** Errors that updating yt-dlp may fix (ids from Help). */
+    val updateTopics = setOf("g_update", "g_format", "g_unsupported")
+
+    fun updateSnoozed(ctx: Context) = System.currentTimeMillis() < prefs(ctx).getLong("update_snooze_until", 0)
+    fun snoozeUpdate(ctx: Context) { prefs(ctx).edit().putLong("update_snooze_until", System.currentTimeMillis() + DAY).apply() }
+
+    /** True when the tools are more than 7 days old (never updated: counted from when the app was installed or updated). */
+    fun updateOld(ctx: Context): Boolean {
+        val installed = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime } catch (_: Exception) { System.currentTimeMillis() }
+        val last = maxOf(prefs(ctx).getLong("last_update", 0), installed)
+        return System.currentTimeMillis() - last > WEEK
+    }
 }
 
 /**

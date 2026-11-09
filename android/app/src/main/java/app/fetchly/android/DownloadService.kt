@@ -20,6 +20,8 @@ import kotlin.concurrent.thread
 class DownloadService : Service() {
     companion object {
         const val EXTRA_URL = "url"
+        const val EXTRA_FORMAT = "format"   // yt-dlp format selector from the quality picker (null = Best)
+        const val EXTRA_AUDIO = "audio"     // true = extract MP3
         const val ACTION_CANCEL = "cancel"
         private const val PID = "fetchly-download"
         private const val CHANNEL = "downloads"
@@ -54,19 +56,22 @@ class DownloadService : Service() {
         State.failedUrl = url
         State.text = "Getting ready…"
         State.changed()
-        thread { work(url) }
+        val format = intent.getStringExtra(EXTRA_FORMAT) ?: Quality.BEST
+        val audio = intent.getBooleanExtra(EXTRA_AUDIO, false)
+        thread { work(url, format, audio) }
         return START_NOT_STICKY
     }
 
-    private fun work(url: String) {
+    private fun work(url: String, format: String, audio: Boolean) {
         val dir = File(cacheDir, "job")
         try {
             dir.deleteRecursively(); dir.mkdirs()
             Tools.init(this)
             val req = YoutubeDLRequest(url).apply {
                 addOption("--no-playlist")
-                addOption("-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b")
-                addOption("--merge-output-format", "mp4")
+                addOption("-f", format)
+                if (audio) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
+                else addOption("--merge-output-format", "mp4")
                 addOption("--no-mtime")
                 addOption("--trim-filenames", "120")
                 addOption("-o", dir.absolutePath + "/%(title).80s [%(id)s].%(ext)s")
