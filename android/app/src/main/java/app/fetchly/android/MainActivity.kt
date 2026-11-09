@@ -318,7 +318,11 @@ class MainActivity : Activity() {
                 else {
                     sTitle.text = State.errorShort
                     val at = State.failedStage?.let { "Failed while ${it.failedAt}." } ?: ""
-                    sSub.text = (if (login) "Tap \"Log in\" and sign in; " +
+                    val base = Cookies.baseDomain(Cookies.hostOf(State.failedUrl))
+                    val loggedIn = Cookies.sessionNames(base) != null && Cookies.savedHasSession(this, base)
+                    sSub.text = (if (login && loggedIn) "Fetchly has your $base login, but the site still asked for one. " +
+                        "The login may have expired, or this account cannot see this link. Log in again, or import a fresh cookies.txt. "
+                    else if (login) "Tap \"Log in\" and sign in; " +
                         "Fetchly closes the page and retries by itself. If the site does not allow it, tap \"Import cookies.txt\". " else "") + at
                 }
             }
@@ -349,6 +353,8 @@ class MainActivity : Activity() {
             appendLine("yt-dlp: " + Tools.version(this@MainActivity))
             appendLine("Android " + Build.VERSION.RELEASE + ", " + Build.MANUFACTURER + " " + Build.MODEL)
             appendLine("Cookies saved: " + Tools.cookiesFile(this@MainActivity).exists())
+            val base = Cookies.baseDomain(Cookies.hostOf(State.failedUrl))
+            if (Cookies.sessionNames(base) != null) appendLine("Login cookie for $base in file: " + Cookies.savedHasSession(this@MainActivity, base))
             appendLine("Link: $link")
             appendLine("Failed while: " + (State.failedStage?.failedAt ?: "unknown"))
             appendLine("Error:")

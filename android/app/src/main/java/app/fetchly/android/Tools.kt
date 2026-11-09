@@ -91,10 +91,10 @@ object Tools {
     /** Errors that updating yt-dlp may fix (ids from Help). */
     val updateTopics = setOf("g_update", "g_format", "g_unsupported")
 
-    /** No pop-up after "Later", and none for 24 hours after an update (a newer yt-dlp may not fix this error). */
+    /** No pop-up for 24 hours after "Later", and none for 3 days after an update (the newest yt-dlp cannot fix an unsupported link). */
     fun updateSnoozed(ctx: Context): Boolean {
         val now = System.currentTimeMillis()
-        return now < prefs(ctx).getLong("update_snooze_until", 0) || now - prefs(ctx).getLong("last_update", 0) < DAY
+        return now < prefs(ctx).getLong("update_snooze_until", 0) || now - prefs(ctx).getLong("last_update", 0) < 3 * DAY
     }
     fun snoozeUpdate(ctx: Context) { prefs(ctx).edit().putLong("update_snooze_until", System.currentTimeMillis() + DAY).apply() }
 

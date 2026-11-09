@@ -69,10 +69,10 @@ class DownloadService : Service() {
         try {
             dir.deleteRecursively(); dir.mkdirs()
             Tools.init(this)
-            val req = YoutubeDLRequest(url).apply {
+            fun request(fmt: String, aud: Boolean) = YoutubeDLRequest(url).apply {
                 addOption("--no-playlist")
-                addOption("-f", format)
-                if (audio) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
+                addOption("-f", fmt)
+                if (aud) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
                 else addOption("--merge-output-format", "mp4")
                 addOption("--no-mtime")
                 addOption("--trim-filenames", "120")
@@ -81,7 +81,7 @@ class DownloadService : Service() {
                 if (c.exists()) addOption("--cookies", c.absolutePath)
             }
             var last = -1
-            YoutubeDL.getInstance().execute(req, PID) { p, _, line ->
+            val progress: (Float, Long, String?) -> Unit = { p, _, line ->
                 val l = line ?: ""
                 if (l.contains("[Merger]") || l.contains("[ExtractAudio]") || l.contains("[VideoRemuxer]") || l.contains("[ffmpeg]")) {
                     if (State.stage != State.Stage.FINISH) {
@@ -100,6 +100,17 @@ class DownloadService : Service() {
                         notify(notif("Downloading… $pct%", pct, false))
                     }
                 }
+            }
+            try {
+                YoutubeDL.getInstance().execute(request(format, audio), PID, progress)
+            } catch (e: Exception) {
+                // The chosen quality is not available for this video: use Best instead of failing.
+                val raw = e.message ?: ""
+                if (cancelled || audio || format == Quality.BEST || Help.find(raw, url)?.id != "g_format") throw e
+                dir.deleteRecursively(); dir.mkdirs()
+                State.stage = State.Stage.FETCH; State.percent = 0; last = -1
+                State.text = "That quality is not available. Trying the best quality…"; State.changed()
+                YoutubeDL.getInstance().execute(request(Quality.BEST, false), PID, progress)
             }
             if (cancelled) throw IllegalStateException("Cancelled")
             val file = dir.listFiles()
