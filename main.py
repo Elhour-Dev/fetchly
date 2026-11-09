@@ -1,4 +1,4 @@
-"""Fetchly - a small, self-hosted video downloader.
+"""Fetchy - a small, self-hosted video downloader.
 
 The backend intentionally keeps all state in memory. It is designed for a
 single-user local deployment: jobs are UUID-addressed, generated files expire
@@ -56,7 +56,7 @@ from pydantic import BaseModel, Field
 # Configuration
 # ---------------------------------------------------------------------------
 
-APP_NAME = "Fetchly"
+APP_NAME = "Fetchy"
 APP_VERSION = "1.0.0"
 BASE_DIR = Path(__file__).resolve().parent
 # Desktop app (Electron wrapper): per-user data folder and updated tools.
@@ -71,7 +71,7 @@ COOKIES_FILE = DATA_DIR / "cookies.txt"
 
 # Optional: read cookies straight from a browser on this computer (local use).
 # Example: FETCHLY_COOKIES_BROWSER=chrome  (also: firefox, edge, brave, opera...)
-# Nothing is copied or saved by Fetchly; the tools read the browser when needed.
+# Nothing is copied or saved by Fetchy; the tools read the browser when needed.
 COOKIES_BROWSER = os.getenv("FETCHLY_COOKIES_BROWSER", "").strip().lower()
 
 # Optional HTTP Basic Auth for public deployments. Leave unset for local use.
@@ -234,7 +234,7 @@ INSTAGRAM_LOGIN_HELP = (
 )
 LOGIN_HELP_BOT = (
     "YouTube wants to confirm you're not a bot. Sign in to YouTube in your browser, "
-    "then start Fetchly with FETCHLY_COOKIES_BROWSER=chrome (or firefox, edge) and try again."
+    "then start Fetchy with FETCHLY_COOKIES_BROWSER=chrome (or firefox, edge) and try again."
 )
 
 
@@ -249,8 +249,8 @@ def friendly_ytdlp_error(exc: Exception) -> str:
     low = raw.lower()
 
     known = (
-        (("ffmpeg", "not found"), "FFmpeg isn't installed or isn't on PATH. Install FFmpeg and restart Fetchly to merge high-quality video and audio."),
-        (("ffprobe", "not found"), "FFmpeg is missing. Install FFmpeg and restart Fetchly."),
+        (("ffmpeg", "not found"), "FFmpeg isn't installed or isn't on PATH. Install FFmpeg and restart Fetchy to merge high-quality video and audio."),
+        (("ffprobe", "not found"), "FFmpeg is missing. Install FFmpeg and restart Fetchy."),
         (("private video",), "This video is private, so it can't be downloaded."),
         (("members-only",), "This video is members-only and needs an account."),
         (("age-restricted",), "This video is age-restricted and can't be fetched without a signed-in session."),
@@ -1259,7 +1259,7 @@ async def lifespan(_: FastAPI):
 
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
-        logger.info("Fetchly %s starting; FFmpeg found at %s", APP_VERSION, ffmpeg)
+        logger.info("Fetchy %s starting; FFmpeg found at %s", APP_VERSION, ffmpeg)
     else:
         logger.warning("FFmpeg was not found on PATH. Merged video and MP3 audio downloads will fail.")
     logger.info("Listening on http://%s:%s", HOST, PORT)
@@ -1311,7 +1311,7 @@ async def add_security_headers(request: Request, call_next):
             status_code=401,
             content="Authentication required",
             media_type="text/plain",
-            headers={"WWW-Authenticate": 'Basic realm="Fetchly", charset="UTF-8"'},
+            headers={"WWW-Authenticate": 'Basic realm="Fetchy", charset="UTF-8"'},
         )
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -1429,7 +1429,7 @@ _COOKIE_BROWSERS = {"firefox", "chrome", "edge", "brave", "opera", "chromium", "
 def _require_local(request: Request) -> None:
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "localhost"}:
-        raise FriendlyError("Cookie settings can only be changed from the computer running Fetchly.", 403, "local_only")
+        raise FriendlyError("Cookie settings can only be changed from the computer running Fetchy.", 403, "local_only")
 
 
 class CookieBrowserRequest(BaseModel):
@@ -1501,7 +1501,7 @@ async def tools_update() -> dict[str, Any]:
 async def video_info(payload: UrlRequest) -> dict[str, Any]:
     url = await ensure_public_url(payload.url)
     if Path(urlsplit(url).path).suffix.lower() in IMAGE_EXTENSIONS:
-        raise FriendlyError("Fetchly downloads videos only.", 422, "videos_only")
+        raise FriendlyError("Fetchy downloads videos only.", 422, "videos_only")
     job = job_store.create(kind="video", url=url, state="fetching_info")
 
     try:

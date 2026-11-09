@@ -1,4 +1,4 @@
-/* Fetchly Help guide. Plain JS, no libraries, works offline.
+/* Fetchy Help guide. Plain JS, no libraries, works offline.
    Three expandable cards (Instagram, YouTube, General problems). Each problem says
    what you see, why it happens, and how to fix it. Same content and structure as the mobile app.
    Also adds: Help button, "How to fix" links, "Copy error details", and the Cookies box. */
@@ -43,7 +43,7 @@
           see: '"This content is not available", "private" or "deleted".',
           why: 'The owner made it private or deleted it.',
           fix: [
-            'Open the link in your browser. If you cannot see it there, Fetchly cannot either.',
+            'Open the link in your browser. If you cannot see it there, Fetchy cannot either.',
             'Private: log in in Firefox with an account that may see it, press "Use browser cookies", then try again.',
             'Deleted: it is gone for good.'
           ]
@@ -71,7 +71,7 @@
           see: '"Video unavailable", "Private video" or "not available in your country".',
           why: 'The owner hid or removed it, it is blocked where you are, or it needs a logged-in adult.',
           fix: [
-            'Open the link in your browser. If it does not play there, Fetchly cannot get it.',
+            'Open the link in your browser. If it does not play there, Fetchy cannot get it.',
             'Age limit: log in in Firefox with an adult account, press "Use browser cookies", then try again.',
             'Blocked in your country: a VPN may help, but it can also trigger the bot check.',
             'Removed or private: only the owner can fix that.'
@@ -90,7 +90,7 @@
           fix: [
             'Copy the link of the video itself from the address bar.',
             'Paste the whole link. It starts with https://',
-            'Photos do not work. Fetchly downloads videos.',
+            'Photos do not work. Fetchy downloads videos.',
             'Press "Update tools", then try again.'
           ]
         },
@@ -98,12 +98,12 @@
           id: 'g_ffmpeg', title: 'No sound, or ffmpeg missing',
           match: /ffmpeg|ffprobe|postprocess|merg(e|ing)|no audio|no sound/i,
           see: 'The video has no sound, or an error names ffmpeg.',
-          why: 'Many sites keep video and sound apart. Fetchly joins them with ffmpeg.',
+          why: 'Many sites keep video and sound apart. Fetchy joins them with ffmpeg.',
           fix: [
             'Press "Try again".',
             'Free some space on your disk.',
             'Press "Update tools".',
-            'Still broken? Install Fetchly again with the latest installer.'
+            'Still broken? Install Fetchy again with the latest installer.'
           ]
         },
         {
@@ -133,7 +133,7 @@
           id: 'g_format', title: '"Format not available"',
           match: /format.{0,20}(is )?not available|requested format|no such format|no formats/i,
           see: '"Requested format is not available".',
-          why: 'The site gave no video and sound mix that Fetchly can use. Often it needs a login.',
+          why: 'The site gave no video and sound mix that Fetchy can use. Often it needs a login.',
           fix: [
             'Pick another quality, or "Best quality".',
             'Press "Update tools".',
@@ -144,7 +144,7 @@
         {
           id: 'g_storage', title: 'File not found in Downloads', match: null,
           see: 'The download finished, but you cannot find the video.',
-          why: 'Fetchly saves finished videos in your Downloads folder.',
+          why: 'Fetchy saves finished videos in your Downloads folder.',
           fix: [
             'Open File Explorer and go to Downloads.',
             'Sort by date, newest first.',
@@ -381,7 +381,7 @@
   function details(msg) {
     var tv = document.getElementById('toolVersions');
     return [
-      'Fetchly error details',
+      'Fetchy error details',
       'Time: ' + new Date().toISOString(),
       'Error: ' + (msg || lastError || '(none shown)'),
       'Technical: ' + (lastDetail || '(none)'),

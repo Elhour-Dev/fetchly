@@ -1,6 +1,6 @@
 # Third-party notices
 
-The Fetchly Windows app bundles these programs. They keep their own licenses.
+The Fetchy Windows app bundles these programs. They keep their own licenses.
 
 ## FFmpeg (GPL v3)
 
@@ -11,7 +11,7 @@ The Fetchly Windows app bundles these programs. They keep their own licenses.
 - Project and source code: https://ffmpeg.org/download.html
 - Build used: https://www.gyan.dev/ffmpeg/builds/ (source and build details are linked there)
 
-Fetchly runs `ffmpeg.exe` as a separate program. It does not link to it.
+Fetchy runs `ffmpeg.exe` as a separate program. It does not link to it.
 You may replace `ffmpeg.exe` in the `resources/ffmpeg` folder of the install with your own build.
 
 ## yt-dlp (The Unlicense)
@@ -26,4 +26,4 @@ You may replace `ffmpeg.exe` in the `resources/ffmpeg` folder of the install wit
 - FastAPI, Starlette, Uvicorn, HTTPX, Pydantic, Pillow, and their dependencies - MIT/BSD/HPND-style licenses (each package keeps its license file in `resources/pylib`)
 - Electron and Chromium - MIT and other open-source licenses - https://github.com/electron/electron
 
-Fetchly itself is not affiliated with any of these projects.
+Fetchy itself is not affiliated with any of these projects.
