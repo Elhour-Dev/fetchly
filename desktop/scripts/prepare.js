@@ -22,10 +22,10 @@ function download(url, dest) {
     const zip = path.join(vendor, 'py.zip');
     await download(`https://www.python.org/ftp/python/${PY}/python-${PY}-embed-amd64.zip`, zip);
     fs.mkdirSync(pyDir, { recursive: true });
-    execFileSync(process.env.SystemRoot + '\System32\tar.exe', ['-xf', zip, '-C', pyDir]);
+    execFileSync(path.join(process.env.SystemRoot, 'System32', 'tar.exe'), ['-xf', zip, '-C', pyDir]);
     fs.unlinkSync(zip);
     // Let the embedded Python see our packages folder (resources/pylib).
-    fs.writeFileSync(path.join(pyDir, 'python312._pth'), 'python312.zip\n.\n..\pylib\n');
+    fs.writeFileSync(path.join(pyDir, 'python312._pth'), ['python312.zip', '.', '../pylib', '../app', ''].join(String.fromCharCode(10)));
   }
   const lib = path.join(vendor, 'pylib');
   if (!fs.existsSync(path.join(lib, 'yt_dlp'))) {
@@ -34,6 +34,9 @@ function download(url, dest) {
   }
   const ff = path.join(vendor, 'ffmpeg');
   fs.mkdirSync(ff, { recursive: true });
-  fs.copyFileSync(require('ffmpeg-static'), path.join(ff, 'ffmpeg.exe'));
+  // Use the ffmpeg.exe found on this PC (or set FFMPEG_EXE to another file).
+  const where = path.join(process.env.SystemRoot, 'System32', 'where.exe');
+  const src = process.env.FFMPEG_EXE || execFileSync(where, ['ffmpeg']).toString().split(String.fromCharCode(10))[0].trim();
+  fs.copyFileSync(fs.realpathSync(src), path.join(ff, 'ffmpeg.exe'));
   console.log('vendor ready');
 })().catch(e => { console.error(e); process.exit(1); });
