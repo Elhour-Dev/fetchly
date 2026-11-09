@@ -51,6 +51,9 @@
     completeMeta: $('completeMeta'),
     downloadLink: $('downloadLink'),
     ffmpegWarning: $('ffmpegWarning'),
+    updateTools: $('updateTools'),
+    updateStatus: $('updateStatus'),
+    toolVersions: $('toolVersions'),
     videoLive: $('videoLive'),
 
     imagesForm: $('imagesForm'),
@@ -628,8 +631,23 @@
     els.progressBar.classList.toggle('soft-pulse', stage === 'processing');
   }
 
+  // Auto-detect: if a link fails as a video, try it as images (and the other way).
+  // These messages mean "the link is fine, the site wants login", so don't switch.
+  const LOGIN_RE = /needs login|not a bot|private|members-only|age-restricted/i;
+  let autoRun = null;
+
+  function fallbackTo(tab, value, message) {
+    autoRun = { from: tab === 'images' ? 'video' : 'images', message };
+    if (tab === 'images') els.imagesUrl.value = value;
+    else els.videoUrl.value = value;
+    setTab(tab);
+    (tab === 'images' ? els.imagesForm : els.videoForm).requestSubmit();
+  }
+
   async function handleVideoSubmit(event) {
     event.preventDefault();
+    const auto = autoRun;
+    autoRun = null;
     if (state.video.phase === 'fetching') return;
 
     const value = normalizeUrlInput(els.videoUrl.value);
@@ -673,7 +691,18 @@
       if (error.name === 'AbortError') {
         showVideoError('The request was canceled.');
       } else {
-        showVideoError(error.message || 'We could not fetch that video.');
+        const message = error.message || 'We could not fetch that video.';
+        if (auto) {
+          // Tried as images first, then as video: show the first (original) reason.
+          setVideoPhase('idle');
+          setTab('images');
+          showImagesError(auto.message);
+        } else if (!LOGIN_RE.test(message)) {
+          setVideoPhase('idle');
+          fallbackTo('images', value, message);
+        } else {
+          showVideoError(message);
+        }
       }
     } finally {
       if (seq === state.video.requestSeq) {
@@ -822,6 +851,8 @@
 
   async function handleImagesSubmit(event) {
     event.preventDefault();
+    const auto = autoRun;
+    autoRun = null;
     if (state.images.phase === 'fetching') return;
 
     const value = normalizeUrlInput(els.imagesUrl.value);
@@ -865,7 +896,19 @@
     } catch (error) {
       if (seq !== state.images.requestSeq) return;
       if (error.name === 'AbortError') showImagesError('The request was canceled.');
-      else showImagesError(error.message || 'We could not find images on that page.');
+      else {
+        const message = error.message || 'We could not find images on that page.';
+        if (auto) {
+          setImagesPhase('idle');
+          setTab('video');
+          showVideoError(auto.message);
+        } else if (!LOGIN_RE.test(message)) {
+          setImagesPhase('idle');
+          fallbackTo('video', value, message);
+        } else {
+          showImagesError(message);
+        }
+      }
     } finally {
       if (seq === state.images.requestSeq) {
         setButtonLoading(els.imagesFetch, false);
@@ -1002,10 +1045,31 @@
   // ---------------------------------------------------------------------
   // Health + init
   // ---------------------------------------------------------------------
+  function showToolVersions(ytdlp, gallery) {
+    els.toolVersions.textContent = `yt-dlp ${ytdlp || '?'} · gallery-dl ${gallery || 'not installed'}`;
+  }
+
+  async function updateTools() {
+    els.updateTools.disabled = true;
+    els.updateTools.textContent = 'Updating…';
+    els.updateStatus.textContent = '';
+    try {
+      const result = await api('/api/tools/update', { method: 'POST', timeout: 330000 });
+      els.updateStatus.textContent = result.message;
+      showToolVersions(result.yt_dlp, result.gallery_dl);
+    } catch (error) {
+      els.updateStatus.textContent = error.message || 'Could not update. Try again later.';
+    } finally {
+      els.updateTools.disabled = false;
+      els.updateTools.textContent = 'Update tools';
+    }
+  }
+
   async function loadHealth() {
     try {
       const health = await api('/api/health', { timeout: 10000 });
       state.health = health;
+      showToolVersions(health.yt_dlp?.version, health.gallery_dl?.version);
       els.ffmpegWarning.hidden = Boolean(health.ffmpeg?.available);
       if (!health.ffmpeg?.available) {
         els.ffmpegWarning.hidden = false;
@@ -1041,6 +1105,7 @@
       updateImageSelection();
     });
     els.zipBtn.addEventListener('click', downloadZip);
+    els.updateTools.addEventListener('click', updateTools);
 
     setVideoPhase('idle');
     setImagesPhase('idle');

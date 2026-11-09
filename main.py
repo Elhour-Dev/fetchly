@@ -19,8 +19,11 @@ import mimetypes
 import os
 import re
 import secrets
+import importlib
 import shutil
 import socket
+import subprocess
+import sys
 import threading
 import time
 import unicodedata
@@ -76,6 +79,11 @@ STATIC_DIR = BASE_DIR / "static"
 # Optional Netscape-format cookie jar used to authenticate yt-dlp requests.
 # It is applied only when present; a missing file is a warning, never a crash.
 COOKIES_FILE = BASE_DIR / "cookies.txt"
+
+# Optional: read cookies straight from a browser on this computer (local use).
+# Example: FETCHLY_COOKIES_BROWSER=chrome  (also: firefox, edge, brave, opera...)
+# Nothing is copied or saved by Fetchly; the tools read the browser when needed.
+COOKIES_BROWSER = os.getenv("FETCHLY_COOKIES_BROWSER", "").strip().lower()
 
 # Optional HTTP Basic Auth for public deployments. Leave unset for local use.
 APP_USERNAME = os.getenv("FETCHLY_USERNAME", "fetchly")
@@ -271,6 +279,16 @@ def page_title_or_slug(title: str | None, url: str) -> str:
     return (urlsplit(url).hostname or "Images")[:200]
 
 
+LOGIN_HELP = (
+    "This site needs login. Sign in to it in your browser, then start Fetchly with "
+    "FETCHLY_COOKIES_BROWSER=chrome (or firefox, edge) and try again."
+)
+LOGIN_HELP_BOT = (
+    "YouTube wants to confirm you're not a bot. Sign in to YouTube in your browser, "
+    "then start Fetchly with FETCHLY_COOKIES_BROWSER=chrome (or firefox, edge) and try again."
+)
+
+
 def _strip_ansi(value: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", value)
 
@@ -287,8 +305,13 @@ def friendly_ytdlp_error(exc: Exception) -> str:
         (("private video",), "This video is private, so it can't be downloaded."),
         (("members-only",), "This video is members-only and needs an account."),
         (("age-restricted",), "This video is age-restricted and can't be fetched without a signed-in session."),
-        (("sign in to confirm",), "The site is asking for a sign-in check. Try again later or use a different link."),
-        (("not a bot",), "The site is asking for a bot check. Try again later or use a different link."),
+        (("sign in to confirm",), LOGIN_HELP_BOT),
+        (("not a bot",), LOGIN_HELP_BOT),
+        (("authentication is required",), LOGIN_HELP),
+        (("login required",), LOGIN_HELP),
+        (("log in",), LOGIN_HELP),
+        (("empty media response",), LOGIN_HELP),
+        (("--cookies",), LOGIN_HELP),
         (("video unavailable",), "This video isn't available. It may have been removed or blocked in your region."),
         (("this video is not available",), "This video isn't available in your region."),
         (("unsupported url",), "This site isn't supported. Paste a direct video or a supported page URL."),
@@ -1043,7 +1066,10 @@ def parse_html_images(html: str, page_url: str) -> tuple[list[dict[str, Any]], s
 # gallery-dl integration
 # ---------------------------------------------------------------------------
 
-if GALLERY_DL_AVAILABLE:
+def _make_limited_job():
+    if not GALLERY_DL_AVAILABLE:
+        return None
+
     class _LimitedDataJob(gallery_job.DataJob):  # type: ignore[misc]
         """Collect image URLs without downloading files, capped at max_items."""
 
@@ -1063,8 +1089,82 @@ if GALLERY_DL_AVAILABLE:
             super().handle_url(url, kwdict)
             if len(self.data_urls) >= self.max_items:
                 raise gallery_exception.StopExtraction()
-else:
-    _LimitedDataJob = None  # type: ignore[assignment]
+
+    return _LimitedDataJob
+
+
+_LimitedDataJob = _make_limited_job()
+
+
+# ---------------------------------------------------------------------------
+# Update tools (yt-dlp + gallery-dl)
+# ---------------------------------------------------------------------------
+
+_update_lock = threading.Lock()
+
+
+def _tool_versions() -> tuple[str | None, str | None]:
+    ytdlp_version = getattr(getattr(yt_dlp, "version", None), "__version__", None)
+    gallery_version = None
+    with contextlib.suppress(Exception):
+        from gallery_dl.version import __version__ as gallery_version
+    return ytdlp_version, gallery_version
+
+
+def _reload_tools() -> None:
+    """Load the freshly installed yt-dlp and gallery-dl without a restart."""
+    global yt_dlp, gallery_config, gallery_exception, gallery_extractor, gallery_job
+    global GalleryMessage, GALLERY_DL_AVAILABLE, _LimitedDataJob
+
+    for name in list(sys.modules):
+        if name.split(".")[0] in {"yt_dlp", "gallery_dl"}:
+            del sys.modules[name]
+    importlib.invalidate_caches()
+
+    import yt_dlp as new_yt_dlp
+    yt_dlp = new_yt_dlp
+    try:
+        from gallery_dl import config, exception, extractor, job
+        from gallery_dl.extractor.message import Message
+        gallery_config, gallery_exception = config, exception
+        gallery_extractor, gallery_job, GalleryMessage = extractor, job, Message
+        GALLERY_DL_AVAILABLE = True
+    except Exception:
+        GALLERY_DL_AVAILABLE = False
+    _LimitedDataJob = _make_limited_job()
+    configure_gallery_dl()
+
+
+def _update_tools_sync() -> dict[str, Any]:
+    if not _update_lock.acquire(blocking=False):
+        raise FriendlyError("An update is already running. Please wait.", 409, "update_busy")
+    try:
+        before = _tool_versions()
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-U", "--disable-pip-version-check",
+                 "yt-dlp", "gallery-dl"],
+                capture_output=True, text=True, timeout=300,
+            )
+        except subprocess.TimeoutExpired:
+            raise FriendlyError("The update took too long. Check your internet and try again.", 504, "update_timeout") from None
+        if proc.returncode != 0:
+            logger.warning("Tool update failed: %s", proc.stderr[-500:])
+            raise FriendlyError(
+                "Couldn't update here (no internet or no permission). "
+                "Try running: pip install -U yt-dlp gallery-dl",
+                500,
+                "update_failed",
+            )
+        _reload_tools()
+        ytdlp_version, gallery_version = _tool_versions()
+        if (ytdlp_version, gallery_version) == before:
+            message = f"Already up to date (yt-dlp {ytdlp_version}, gallery-dl {gallery_version})"
+        else:
+            message = f"Updated to version {ytdlp_version} (yt-dlp) and {gallery_version} (gallery-dl)"
+        return {"message": message, "yt_dlp": ytdlp_version, "gallery_dl": gallery_version}
+    finally:
+        _update_lock.release()
 
 
 def configure_gallery_dl() -> None:
@@ -1075,6 +1175,11 @@ def configure_gallery_dl() -> None:
         gallery_config.set(("extractor",), "retries", 1)
         gallery_config.set(("extractor",), "user-agent", USER_AGENT)
         gallery_config.set(("extractor",), "sleep-request", 0.1)
+        # Same login source as yt-dlp: cookies.txt first, else a browser.
+        if COOKIES_FILE.is_file():
+            gallery_config.set(("extractor",), "cookies", str(COOKIES_FILE))
+        elif COOKIES_BROWSER:
+            gallery_config.set(("extractor",), "cookies", [COOKIES_BROWSER])
     except Exception:
         logger.debug("Could not tune gallery-dl configuration", exc_info=True)
 
@@ -1098,12 +1203,23 @@ def _extract_gallery_images_sync(url: str) -> dict[str, Any] | None:
     if getattr(extractor, "category", "") in {"generic", "recursive"}:
         return None
 
+    status = 0
     try:
         collector = _LimitedDataJob(extractor, file=None, resolve=True, max_items=MAX_IMAGE_COUNT)
-        collector.run()
+        status = collector.run() or 0
     except Exception:
         logger.debug("gallery-dl extraction failed", exc_info=True)
         return None
+
+    # gallery-dl exit-style flags: 4 = HTTP error, 16 = login needed.
+    if status & 16 and not collector.data_urls:
+        raise FriendlyError(LOGIN_HELP, 422, "login_required")
+    if status & 4 and not collector.data_urls:
+        raise FriendlyError(
+            "The site refused the request. It may need login or is limiting requests; try again later.",
+            422,
+            "site_refused",
+        )
 
     title = ""
     images: list[dict[str, Any]] = []
@@ -1175,6 +1291,8 @@ async def extract_gallery_images(url: str) -> dict[str, Any] | None:
     except asyncio.TimeoutError:
         logger.info("gallery-dl timed out for %s; trying generic HTML", url)
         return None
+    except FriendlyError:
+        raise
     except Exception:
         logger.debug("gallery-dl failed for %s", url, exc_info=True)
         return None
@@ -1348,6 +1466,8 @@ def _cookie_options() -> dict[str, str]:
 
     if has_cookies:
         return {"cookiefile": str(COOKIES_FILE)}
+    if COOKIES_BROWSER:
+        return {"cookiesfrombrowser": (COOKIES_BROWSER,)}
 
     with _cookie_warning_lock:
         if not _cookie_warning_emitted:
@@ -1414,15 +1534,14 @@ def extract_video_info_sync(url: str) -> dict[str, Any]:
     has_playable_format = any(
         fmt.get("vcodec") not in (None, "none")
         or fmt.get("acodec") not in (None, "none")
+        # Direct files (plain .mp4 links etc.) often have no codec info at all.
+        or (fmt.get("url") and fmt.get("ext") not in {"mhtml", "none"} and fmt.get("protocol") != "mhtml")
         for fmt in formats
     )
     if not has_playable_format:
-        raise FriendlyError(
-            "YouTube didn't return any playable formats. Refresh cookies.txt "
-            "from a signed-in browser and try again.",
-            422,
-            "no_formats",
-        )
+        if "youtube" in str(info.get("extractor_key") or "").lower():
+            raise FriendlyError(LOGIN_HELP_BOT, 422, "no_formats")
+        raise FriendlyError("No video was found in this link.", 422, "no_formats")
 
     title = str(info.get("title") or "Untitled video").strip()[:300]
     thumbnail = info.get("thumbnail")
@@ -1836,6 +1955,11 @@ async def health() -> dict[str, Any]:
             "max_image_mb": round(MAX_IMAGE_DOWNLOAD_BYTES / (1024 * 1024), 1),
         },
     }
+
+
+@app.post("/api/tools/update", dependencies=[Depends(rate_limit("tools-update", 3))])
+async def tools_update() -> dict[str, Any]:
+    return await asyncio.to_thread(_update_tools_sync)
 
 
 # ---------------------------------------------------------------------------

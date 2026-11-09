@@ -473,6 +473,12 @@
     <p class="mt-8 text-center text-[11px] leading-5 text-slate-400 dark:text-slate-600">
       Built for personal, lawful use. Please respect copyright and each site's terms.
     </p>
+
+    <div class="mt-4 flex flex-col items-center gap-1 text-center text-[11px] leading-5 text-slate-400 dark:text-slate-500">
+      <button id="updateTools" type="button" class="rounded-lg border border-slate-200 px-3 py-1.5 text-[12px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">Update tools</button>
+      <p id="updateStatus" role="status" aria-live="polite" class="min-h-[1.25rem]"></p>
+      <p id="toolVersions"></p>
+    </div>
   </main>
 
   <div id="toasts" class="pointer-events-none fixed right-3 top-20 z-50 flex w-[calc(100%-1.5rem)] max-w-[360px] flex-col gap-2 sm:right-5" aria-live="polite" aria-atomic="false"></div>

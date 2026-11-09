@@ -266,3 +266,16 @@ That is almost always FFmpeg missing from `PATH`. The audio-only and progressive
 ## License
 
 This project is provided for personal, lawful use. You are responsible for complying with the terms of service of any site you access and for the copyright status of any content you download.
+
+## Logins and the YouTube "not a bot" check
+
+Some links need you to be logged in (Instagram, private posts, YouTube bot checks).
+The yt-dlp and gallery-dl docs recommend using your browser's cookies:
+
+1. Sign in to the site in your normal browser (Chrome, Firefox, Edge...).
+2. Start Fetchly with `FETCHLY_COOKIES_BROWSER=chrome` (or `firefox`, `edge`, `brave`).
+   Windows PowerShell: `$env:FETCHLY_COOKIES_BROWSER="chrome"; uvicorn main:app`
+3. If Chrome/Edge cookies fail to read, close the browser first or use Firefox.
+
+Fetchly never saves your cookies or passwords. Do not commit `cookies.txt` (it is in `.gitignore`).
+Use the **Update tools** button at the bottom of the page to update yt-dlp and gallery-dl.
