@@ -112,7 +112,7 @@ class LoginActivity : Activity() {
     /** The site refused the login page. Not worked around. If the session cookie arrived anyway, this is not an error. */
     private fun blocked() {
         if (finished || Cookies.hasSession(Cookies.fromWebView(hosts, base), base) && Cookies.sessionNames(base) != null) return
-        noticeText.text = "This site did not open its login page inside the app. Fetchly does not work around that. " +
+        noticeText.text = "This site did not open its login page inside the app. Fetchy does not work around that. " +
             "Tap Cancel, or use \"Import cookies.txt\" below."
         notice.visibility = View.VISIBLE
     }
@@ -157,7 +157,7 @@ class LoginActivity : Activity() {
         }
         if (!Cookies.hasSession(lines, base)) {
             // No login, but the site gave this browser its normal visitor cookies. They can be enough for a public link,
-            // so keep them and try again. If it fails, Fetchly says login is still needed.
+            // so keep them and try again. If it fails, Fetchy says login is still needed.
             Toast.makeText(this, "No login found. Saved the site's visitor cookies; trying again.", Toast.LENGTH_LONG).show()
             save(lines, null); return
         }

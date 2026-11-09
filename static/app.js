@@ -1,4 +1,4 @@
-/* Fetchly frontend - vanilla JS, no build step. */
+/* Fetchy frontend - vanilla JS, no build step. */
 (function () {
   'use strict';
 

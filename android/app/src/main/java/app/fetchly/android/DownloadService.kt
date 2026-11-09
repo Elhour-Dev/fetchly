@@ -197,7 +197,7 @@ class DownloadService : Service() {
         )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Fetchly").setContentText(text)
+            .setContentTitle("Fetchy").setContentText(text)
             .setProgress(100, pct, indeterminate).setOngoing(true).setOnlyAlertOnce(true)
             .setContentIntent(openApp())
             .addAction(Notification.Action.Builder(null, "Cancel", cancel).build())

@@ -1,4 +1,4 @@
-/* Fetchly Help guide. Plain JS, no libraries, works offline.
+/* Fetchy Help guide. Plain JS, no libraries, works offline.
    Adds: Help button, Help panel, "How to fix" links and "Copy error details". */
 (function () {
   'use strict';
@@ -15,8 +15,8 @@
         'Press "Update tools" so yt-dlp and its helper scripts (yt-dlp-ejs) are current.',
         'Log in to YouTube in Firefox, then close the app and start it again with FETCHLY_COOKIES_BROWSER=firefox (this is the yt-dlp option --cookies-from-browser firefox)',
         'Chrome on Windows often fails to give cookies (the cookie file is locked or encrypted). Firefox usually works.',
-        'Other way: export a cookies.txt file (Netscape format) and save it as cookies.txt in the Fetchly folder (Fetchly uses it by itself). yt-dlp says: open a private window, log in to YouTube, open youtube.com/robots.txt in that same tab, export the youtube.com cookies, then close the private window.',
-        'Keep cookies.txt private. It holds your login. Never share it or commit it. Fetchly ignores cookies*.txt in git.'
+        'Other way: export a cookies.txt file (Netscape format) and save it as cookies.txt in the Fetchy folder (Fetchy uses it by itself). yt-dlp says: open a private window, log in to YouTube, open youtube.com/robots.txt in that same tab, export the youtube.com cookies, then close the private window.',
+        'Keep cookies.txt private. It holds your login. Never share it or commit it. Fetchy ignores cookies*.txt in git.'
       ],
       warn: 'Warning: using your main Google account can get it limited or banned (yt-dlp warns about this). A spare account is safer.'
     },
@@ -40,7 +40,7 @@
       see: 'The video is private, removed, or asks you to confirm your age.',
       why: 'The owner hid or deleted it, or the site wants a signed-in adult account.',
       fix: [
-        'Open the link in your browser. If you cannot watch it there, Fetchly cannot download it.',
+        'Open the link in your browser. If you cannot watch it there, Fetchy cannot download it.',
         'Private video: only the owner can allow access.',
         'Deleted video: it is gone. Nothing can fix this.',
         'Age-restricted: log in in Firefox and use your cookies (see the YouTube bot topic).'
@@ -60,12 +60,12 @@
     {
       id: 'unsupported', title: 'Link not supported, or image links',
       match: /unsupported url|aren.t allowed|private network|local and private|not supported|no video|videos only|could not find|no media|not a valid|invalid url|no supported/i,
-      see: '"Unsupported URL", "No video found" or "Fetchly downloads videos only."',
-      why: 'The link is not a video page (Fetchly downloads videos only), is cut off, or the site is not supported.',
+      see: '"Unsupported URL", "No video found" or "Fetchy downloads videos only."',
+      why: 'The link is not a video page (Fetchy downloads videos only), is cut off, or the site is not supported.',
       fix: [
         'Copy the full link from the address bar again. Remove extra text before or after it.',
         'Use the page link of the video or post, not a link to a search or home page.',
-        'Image links do not work. Fetchly downloads videos only.',
+        'Image links do not work. Fetchy downloads videos only.',
         'Press "Update tools". New site support comes with new versions.'
       ]
     },
@@ -85,9 +85,9 @@
       id: 'port', title: '"Port already in use"',
       match: /port.{0,30}in use|address already in use|10048|only one usage of each socket/i,
       see: 'The app does not start and says the port is in use.',
-      why: 'Another copy of Fetchly (or another program) already uses that port.',
+      why: 'Another copy of Fetchy (or another program) already uses that port.',
       fix: [
-        'Close the other Fetchly window or terminal.',
+        'Close the other Fetchy window or terminal.',
         'Or start with a different port, for example: set PORT=8002 (Windows) then run the app.',
         'Open the new address in your browser.'
       ]
@@ -273,7 +273,7 @@
   function details(msg) {
     var tv = document.getElementById('toolVersions');
     return [
-      'Fetchly error details',
+      'Fetchy error details',
       'Time: ' + new Date().toISOString(),
       'Error: ' + (msg || lastError || '(none shown)'),
       'Technical: ' + (lastDetail || '(none)'),

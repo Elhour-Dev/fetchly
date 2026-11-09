@@ -60,7 +60,7 @@ class MainActivity : Activity() {
             setImageResource(R.drawable.ic_logo); setPadding(dp(9), dp(9), dp(9), dp(9))
             background = shape(col(R.color.accent), 12)
         }, LinearLayout.LayoutParams(dp(40), dp(40)))
-        header.addView(label("Fetchly", 20f, bold = true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
+        header.addView(label("Fetchy", 20f, bold = true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
         header.addView(button("Help", Kind.GHOST, 40) { openHelp(null) }.apply { setPadding(dp(16), 0, dp(16), 0) },
             LinearLayout.LayoutParams(-2, dp(40)))
         header.addView(button("Settings", Kind.GHOST, 40) { startActivity(Intent(this, SettingsActivity::class.java)) }
@@ -169,7 +169,7 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); State.listener = { render() }; render() }
     override fun onDestroy() { State.listener = null; super.onDestroy() }
 
-    /** Share menu: a link shared to Fetchly fills the box and starts the download. */
+    /** Share menu: a link shared to Fetchy fills the box and starts the download. */
     private fun handleIntent(i: Intent?) {
         if (i?.action != Intent.ACTION_SEND) return
         val shared = i.getStringExtra(Intent.EXTRA_TEXT) ?: return
@@ -253,7 +253,7 @@ class MainActivity : Activity() {
         qList.removeAllViews()
         qNote.text = when {
             loading -> if (ready) "Checking what this video offers…" else "Getting ready…"
-            failed -> "Could not load the qualities. Fetchly will download the best quality."
+            failed -> "Could not load the qualities. Fetchy will download the best quality."
             else -> ""
         }
         show(qNote, qNote.text.isNotEmpty())
@@ -328,11 +328,11 @@ class MainActivity : Activity() {
                         200 -> "Instagram accepts your login, but gave no video for this link. The story may be gone, or this account cannot see it. "
                         401, 403 -> "Instagram no longer accepts the saved login. Tap \"Log in\" to sign in again. "
                         429 -> "Instagram is limiting this network right now. Turn off VPN or switch network, wait a few minutes, then tap Retry. "
-                        else -> "Fetchly has your $base login, but the site still asked for one. " +
+                        else -> "Fetchy has your $base login, but the site still asked for one. " +
                             "The login may have expired, or this account cannot see this link. Log in again, or import a fresh cookies.txt. "
                     }
                     else if (login) "Tap \"Log in\" and sign in; " +
-                        "Fetchly closes the page and retries by itself. If the site does not allow it, tap \"Import cookies.txt\". " else "") + at
+                        "Fetchy closes the page and retries by itself. If the site does not allow it, tap \"Import cookies.txt\". " else "") + at
                 }
             }
             else -> {}
@@ -358,7 +358,7 @@ class MainActivity : Activity() {
     private fun copyErrorDetails() {
         val link = urlRegex.find(url.text.toString())?.value?.substringBefore('?') ?: ""
         val text = buildString {
-            appendLine("Fetchly Android 1.0")
+            appendLine("Fetchy Android 1.0")
             appendLine("yt-dlp: " + Tools.version(this@MainActivity))
             appendLine("Android " + Build.VERSION.RELEASE + ", " + Build.MANUFACTURER + " " + Build.MODEL)
             appendLine("Cookies saved: " + Tools.cookiesFile(this@MainActivity).exists())
@@ -370,7 +370,7 @@ class MainActivity : Activity() {
             appendLine("Error:")
             append(State.errorDetails)
         }
-        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fetchly error", text))
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fetchy error", text))
         Toast.makeText(this, "Error details copied.", Toast.LENGTH_SHORT).show()
     }
 

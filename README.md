@@ -1,10 +1,10 @@
-# Fetchly
+# Fetchy
 
 A polished, self-hosted video downloader built with **FastAPI**, **yt-dlp**, and **Tailwind CSS**.
 
-Fetchly is designed as a local, single-user utility. Paste a public video URL to preview its title, thumbnail, duration, and available qualities, then follow a live download with speed and ETA.
+Fetchy is designed as a local, single-user utility. Paste a public video URL to preview its title, thumbnail, duration, and available qualities, then follow a live download with speed and ETA.
 
-> Use Fetchly only for content you have the right to download. Respect each site's terms and applicable copyright law.
+> Use Fetchy only for content you have the right to download. Respect each site's terms and applicable copyright law.
 
 ---
 
@@ -34,19 +34,19 @@ Fetchly is designed as a local, single-user utility. Paste a public video URL to
 
 ## Download for Windows
 
-1. Go to the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchly-Setup-1.0.0.exe`.
+1. Go to the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchy-Setup-1.0.0.exe`.
 2. Run it. No admin rights needed. yt-dlp and ffmpeg are already inside.
 3. Windows may show "Protected your PC". Click **More info**, then **Run anyway**.
 4. Videos save to your Downloads folder. Use **Update tools** to get the newest yt-dlp.
 
-Check the download with the SHA256 value in the release notes (`Get-FileHash Fetchly-Setup-1.0.0.exe`).
+Check the download with the SHA256 value in the release notes (`Get-FileHash Fetchy-Setup-1.0.0.exe`).
 License notices (ffmpeg is GPL v3, yt-dlp is Unlicense): see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Download for Android
 
-1. On your phone, open the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchly-1.0.0.apk`.
+1. On your phone, open the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchy-1.0.0.apk`.
 2. Open the file. Android will ask to allow installs from your browser or Files app. Allow it for this install.
-3. Share a video link to Fetchly, or paste it in the app. Videos save to your Downloads folder.
+3. Share a video link to Fetchy, or paste it in the app. Videos save to your Downloads folder.
 4. Login problems? The app shows a **Log in** button. If the site blocks that, use **Import cookies.txt**. Open **Help** in the app for steps.
 
 Check the download with the SHA256 value in the release notes. Needs Android 10 or newer and a 64-bit (arm64) phone.
@@ -107,7 +107,7 @@ Arch:
 sudo pacman -S ffmpeg
 ```
 
-If `ffmpeg -version` works in your terminal, Fetchly will find it.
+If `ffmpeg -version` works in your terminal, Fetchy will find it.
 
 ---
 
@@ -143,7 +143,7 @@ The API docs are available at <http://127.0.0.1:8000/docs>.
 ### First check
 
 1. Install FFmpeg and confirm `ffmpeg -version` works.
-2. Start Fetchly. Open the app. If FFmpeg is missing, a warning appears above the video form and `/api/health` reports `"available": false`.
+2. Start Fetchy. Open the app. If FFmpeg is missing, a warning appears above the video form and `/api/health` reports `"available": false`.
 3. Paste a public video link and fetch its details.
 4. Choose a quality and download. The file appears in `downloads/` with a UUID filename.
 
@@ -219,14 +219,14 @@ The server binds to localhost by default. If you expose it on a LAN, put it behi
 
 ### "FFmpeg wasn't found on PATH"
 
-- Run `ffmpeg -version` in the same terminal that starts Fetchly.
+- Run `ffmpeg -version` in the same terminal that starts Fetchy.
 - If it works elsewhere, close and reopen the terminal (or IDE) so it receives the updated `PATH`.
 - On Windows, confirm the FFmpeg `bin` folder (the one containing `ffmpeg.exe`) is on `PATH`.
-- Restart the Fetchly server after fixing `PATH`.
+- Restart the Fetchy server after fixing `PATH`.
 
 ### A video fails with a sign-in or bot check
 
-Some sites (notably YouTube) may ask for a login/bot verification depending on your network. Fetchly intentionally does not ship cookies or credentials. Try a different public link, or configure cookies for yt-dlp locally if you understand the account/security implications. Raw stack traces are never sent to the browser — check the server console for details.
+Some sites (notably YouTube) may ask for a login/bot verification depending on your network. Fetchy intentionally does not ship cookies or credentials. Try a different public link, or configure cookies for yt-dlp locally if you understand the account/security implications. Raw stack traces are never sent to the browser — check the server console for details.
 
 ### Download link expires
 
@@ -259,12 +259,12 @@ Some links need you to be logged in (Instagram, private posts, YouTube bot check
 The yt-dlp docs recommend using your browser's cookies:
 
 1. Sign in to the site in your normal browser (Chrome, Firefox, Edge...).
-2. Start Fetchly with `FETCHLY_COOKIES_BROWSER=chrome` (or `firefox`, `edge`, `brave`).
+2. Start Fetchy with `FETCHLY_COOKIES_BROWSER=chrome` (or `firefox`, `edge`, `brave`).
    Windows PowerShell: `$env:FETCHLY_COOKIES_BROWSER="chrome"; uvicorn main:app`
 3. If Chrome/Edge cookies fail to read, close the browser first or use Firefox.
 
-Fetchly never saves your cookies or passwords. Do not commit `cookies.txt` (it is in `.gitignore`).
+Fetchy never saves your cookies or passwords. Do not commit `cookies.txt` (it is in `.gitignore`).
 Use the **Update tools** button at the bottom of the page to update yt-dlp.
 
 
-Fetchly downloads videos only. Image links show "Fetchly downloads videos only."
+Fetchy downloads videos only. Image links show "Fetchy downloads videos only."

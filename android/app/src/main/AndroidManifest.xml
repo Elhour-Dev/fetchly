@@ -9,8 +9,8 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/no_backup"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher"
-        android:label="Fetchly"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="Fetchy"
         android:extractNativeLibs="true"
         android:theme="@style/AppTheme">
 
