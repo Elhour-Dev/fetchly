@@ -8,12 +8,7 @@
   const $ = (id) => document.getElementById(id);
   const els = {
     themeToggle: $('themeToggle'),
-    tablist: $('tablist'),
-    tabIndicator: $('tabIndicator'),
-    videoTab: $('videoTab'),
-    imagesTab: $('imagesTab'),
     videoPanel: $('videoPanel'),
-    imagesPanel: $('imagesPanel'),
 
     videoForm: $('videoForm'),
     videoUrl: $('videoUrl'),
@@ -51,34 +46,10 @@
     completeMeta: $('completeMeta'),
     downloadLink: $('downloadLink'),
     ffmpegWarning: $('ffmpegWarning'),
+    updateTools: $('updateTools'),
+    updateStatus: $('updateStatus'),
+    toolVersions: $('toolVersions'),
     videoLive: $('videoLive'),
-
-    imagesForm: $('imagesForm'),
-    imagesUrl: $('imagesUrl'),
-    imagesPaste: $('imagesPaste'),
-    imagesClear: $('imagesClear'),
-    imagesHint: $('imagesHint'),
-    imagesUrlError: $('imagesUrlError'),
-    imagesFetch: $('imagesFetch'),
-    imagesEmpty: $('imagesEmpty'),
-    imagesSkeleton: $('imagesSkeleton'),
-    imagesErrorCard: $('imagesErrorCard'),
-    imagesErrorText: $('imagesErrorText'),
-    imagesRetry: $('imagesRetry'),
-    imageResults: $('imageResults'),
-    imageTitle: $('imageTitle'),
-    imageCount: $('imageCount'),
-    truncatedNote: $('truncatedNote'),
-    imageGrid: $('imageGrid'),
-    selectAll: $('selectAll'),
-    clearAll: $('clearAll'),
-    selectionCount: $('selectionCount'),
-    zipBtn: $('zipBtn'),
-    zipStatus: $('zipStatus'),
-    zipReady: $('zipReady'),
-    zipReadyText: $('zipReadyText'),
-    zipLink: $('zipLink'),
-    imagesLive: $('imagesLive'),
 
     toasts: $('toasts'),
   };
@@ -87,7 +58,6 @@
   // State
   // ---------------------------------------------------------------------
   const state = {
-    activeTab: 'video',
     health: null,
     video: {
       phase: 'idle',
@@ -101,24 +71,11 @@
       terminal: false,
       autoDownloadedFor: null,
     },
-    images: {
-      phase: 'idle',
-      requestSeq: 0,
-      controller: null,
-      jobId: null,
-      images: [],
-      selected: new Set(),
-      pageTitle: '',
-      truncated: false,
-      zipBusy: false,
-    },
   };
 
   const INITIAL_BUTTON_LABELS = {
     videoFetch: 'Fetch video',
     videoDownload: 'Download video',
-    imagesFetch: 'Find images',
-    zipBtn: 'Download ZIP',
   };
 
   // ---------------------------------------------------------------------
@@ -333,67 +290,6 @@
   }
 
   // ---------------------------------------------------------------------
-  // Tabs
-  // ---------------------------------------------------------------------
-  const TAB_PANELS = { video: 'videoPanel', images: 'imagesPanel' };
-  const TAB_BUTTONS = { video: 'videoTab', images: 'imagesTab' };
-
-  function setTab(name, options = {}) {
-    const valid = name === 'images' ? 'images' : 'video';
-    state.activeTab = valid;
-
-    Object.keys(TAB_BUTTONS).forEach((key) => {
-      const active = key === valid;
-      const button = els[TAB_BUTTONS[key]];
-      button.setAttribute('aria-selected', active ? 'true' : 'false');
-      button.tabIndex = active ? 0 : -1;
-      button.className = [
-        'relative z-10 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500',
-        active
-          ? 'text-slate-900 dark:text-white'
-          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
-      ].join(' ');
-      els[TAB_PANELS[key]].hidden = !active;
-    });
-
-    els.tabIndicator.style.transform = valid === 'images'
-      ? 'translateX(calc(100% + 4px))'
-      : 'translateX(0)';
-
-    if (options.focus) {
-      els[TAB_BUTTONS[valid]].focus();
-    }
-    if (options.updateHash !== false) {
-      try {
-        history.replaceState(null, '', `${location.pathname}${location.search}#${valid}`);
-      } catch (_) {}
-    }
-  }
-
-  function setupTabs() {
-    const initial = location.hash === '#images' ? 'images' : 'video';
-    setTab(initial, { updateHash: false });
-
-    els.videoTab.addEventListener('click', () => setTab('video'));
-    els.imagesTab.addEventListener('click', () => setTab('images'));
-
-    els.tablist.addEventListener('keydown', (event) => {
-      const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
-      if (!keys.includes(event.key)) return;
-      event.preventDefault();
-      const order = ['video', 'images'];
-      const current = state.activeTab;
-      let next = current;
-      if (event.key === 'ArrowLeft') next = current === 'video' ? 'images' : 'video';
-      if (event.key === 'ArrowRight') next = current === 'video' ? 'images' : 'video';
-      if (event.key === 'Home') next = order[0];
-      if (event.key === 'End') next = order[1];
-      setTab(next, { focus: true });
-    });
-  }
-
-  // ---------------------------------------------------------------------
   // URL fields
   // ---------------------------------------------------------------------
   function refreshClearButton(input, button) {
@@ -418,7 +314,6 @@
 
   function updateFetchButtons() {
     els.videoFetch.disabled = state.video.phase === 'fetching' || !els.videoUrl.value.trim();
-    els.imagesFetch.disabled = state.images.phase === 'fetching' || !els.imagesUrl.value.trim();
   }
 
   function setupUrlField(input, pasteButton, clearButton, errorEl) {
@@ -485,7 +380,7 @@
     }
     const spinner = button.querySelector('[data-spinner]');
     if (spinner) spinner.classList.toggle('hidden', !loading);
-    button.querySelectorAll('[data-arrow], [data-download-icon], [data-zip-icon]').forEach((icon) => {
+    button.querySelectorAll('[data-arrow], [data-download-icon]').forEach((icon) => {
       icon.classList.toggle('hidden', Boolean(loading));
     });
   }
@@ -504,16 +399,6 @@
       els.videoProgress.hidden = phase !== 'downloading';
       els.videoComplete.hidden = phase !== 'complete';
     }
-    updateFetchButtons();
-  }
-
-  function setImagesPhase(phase) {
-    state.images.phase = phase;
-    const showResults = phase === 'ready';
-    els.imagesEmpty.hidden = phase !== 'idle';
-    els.imagesSkeleton.hidden = phase !== 'fetching';
-    els.imagesErrorCard.hidden = phase !== 'error';
-    els.imageResults.hidden = !showResults;
     updateFetchButtons();
   }
 
@@ -673,7 +558,8 @@
       if (error.name === 'AbortError') {
         showVideoError('The request was canceled.');
       } else {
-        showVideoError(error.message || 'We could not fetch that video.');
+        const message = error.message || 'We could not fetch that video.';
+        showVideoError(message);
       }
     } finally {
       if (seq === state.video.requestSeq) {
@@ -811,207 +697,36 @@
   }
 
   // ---------------------------------------------------------------------
-  // Images flow
-  // ---------------------------------------------------------------------
-  function showImagesError(message) {
-    setImagesPhase('error');
-    els.imagesErrorText.textContent = message;
-    els.imagesLive.textContent = `Image scan error: ${message}`;
-    toast(message, 'error', 5200);
-  }
-
-  async function handleImagesSubmit(event) {
-    event.preventDefault();
-    if (state.images.phase === 'fetching') return;
-
-    const value = normalizeUrlInput(els.imagesUrl.value);
-    const validationMessage = validateUrl(value);
-    if (validationMessage) {
-      setFieldError(els.imagesUrl, els.imagesUrlError, validationMessage);
-      els.imagesUrl.focus();
-      return;
-    }
-    if (value !== els.imagesUrl.value.trim()) els.imagesUrl.value = value;
-    clearFieldError(els.imagesUrl, els.imagesUrlError);
-
-    const seq = ++state.images.requestSeq;
-    const controller = new AbortController();
-    state.images.controller = controller;
-    state.images.jobId = null;
-    state.images.images = [];
-    state.images.selected = new Set();
-    setImagesPhase('fetching');
-    setButtonLoading(els.imagesFetch, true, 'Scanning…');
-    els.zipReady.hidden = true;
-    els.zipStatus.hidden = true;
-    els.imagesLive.textContent = 'Scanning the page for images.';
-
-    try {
-      const result = await api('/api/images/extract', {
-        method: 'POST',
-        body: { url: value },
-        signal: controller.signal,
-        timeout: 95000,
-      });
-      if (seq !== state.images.requestSeq) return;
-      state.images.jobId = result.job_id;
-      state.images.images = result.images || [];
-      state.images.pageTitle = result.page_title || 'Images';
-      state.images.truncated = Boolean(result.truncated);
-      state.images.selected = new Set(state.images.images.map((image) => image.id));
-      renderImageResults(result);
-      setImagesPhase('ready');
-      els.imagesLive.textContent = `Found ${state.images.images.length} images. All selected.`;
-    } catch (error) {
-      if (seq !== state.images.requestSeq) return;
-      if (error.name === 'AbortError') showImagesError('The request was canceled.');
-      else showImagesError(error.message || 'We could not find images on that page.');
-    } finally {
-      if (seq === state.images.requestSeq) {
-        setButtonLoading(els.imagesFetch, false);
-        updateFetchButtons();
-      }
-    }
-  }
-
-  function renderImageResults(result) {
-    const images = state.images.images;
-    els.imageTitle.textContent = state.images.pageTitle;
-    const noun = images.length === 1 ? 'image' : 'images';
-    const found = Number(result.total_found) || images.length;
-    els.imageCount.textContent = state.images.truncated
-      ? `Showing ${images.length} of ${found} ${found === 1 ? 'image' : 'images'}`
-      : `${images.length} ${noun} found`;
-    els.truncatedNote.hidden = !state.images.truncated;
-    if (state.images.truncated) {
-      const total = Number(result.total_found) || images.length;
-      els.truncatedNote.textContent = `This page has about ${total} images. Fetchly shows the first ${images.length} so the page stays fast.`;
-    }
-    els.zipReady.hidden = true;
-    els.zipStatus.hidden = true;
-    els.zipStatus.textContent = 'Downloading images and building your ZIP…';
-    els.imageGrid.replaceChildren();
-
-    images.forEach((image, index) => {
-      const card = document.createElement('label');
-      card.className = [
-        'image-card group relative block aspect-square cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-slate-100',
-        'focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 dark:border-white/10 dark:bg-white/[0.04]',
-        'dark:focus-within:ring-offset-[#0d1220]',
-      ].join(' ');
-      if (state.images.selected.has(image.id)) card.classList.add('is-selected');
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = state.images.selected.has(image.id);
-      checkbox.className = 'absolute left-2 top-2 z-20 h-[18px] w-[18px] cursor-pointer rounded accent-indigo-600 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white';
-      checkbox.setAttribute('aria-label', `Select image ${index + 1}${image.alt ? `: ${image.alt}` : ''}`);
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) state.images.selected.add(image.id);
-        else state.images.selected.delete(image.id);
-        card.classList.toggle('is-selected', checkbox.checked);
-        updateImageSelection();
-      });
-
-      const img = document.createElement('img');
-      img.src = image.preview_url;
-      img.alt = image.alt || `Image ${index + 1}`;
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      img.className = 'h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]';
-
-      const fallback = document.createElement('div');
-      fallback.hidden = true;
-      fallback.className = 'absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-slate-100 px-2 text-center text-slate-400 dark:bg-white/[0.04] dark:text-slate-500';
-      fallback.innerHTML = '<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m21 15-4.5-4.5L6 21"/></svg><span class="text-[10px] font-medium">Preview unavailable</span>';
-      img.addEventListener('error', () => {
-        img.hidden = true;
-        fallback.hidden = false;
-      });
-
-      const dot = document.createElement('span');
-      dot.className = 'selection-dot pointer-events-none absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm';
-      dot.innerHTML = '<svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg>';
-
-      card.append(checkbox, img, fallback, dot);
-      els.imageGrid.appendChild(card);
-    });
-
-    updateImageSelection();
-  }
-
-  function updateImageSelection() {
-    const selected = state.images.selected.size;
-    const total = state.images.images.length;
-    els.selectionCount.textContent = selected === 0
-      ? 'No images selected'
-      : `${selected} of ${total} selected`;
-    els.selectAll.disabled = selected === total || total === 0;
-    els.clearAll.disabled = selected === 0;
-    els.zipBtn.disabled = selected === 0 || state.images.zipBusy;
-    const label = els.zipBtn.querySelector('[data-btn-label]');
-    if (label && !state.images.zipBusy) {
-      label.textContent = selected > 0 ? `Download ${selected} as ZIP` : 'Download ZIP';
-    }
-  }
-
-  async function downloadZip() {
-    if (state.images.zipBusy || state.images.selected.size === 0 || !state.images.jobId) return;
-    state.images.zipBusy = true;
-    setButtonLoading(els.zipBtn, true, 'Preparing ZIP…');
-    els.zipStatus.hidden = false;
-    els.zipStatus.textContent = 'Downloading images and building your ZIP…';
-    els.zipReady.hidden = true;
-    els.imagesLive.textContent = 'Preparing ZIP download.';
-
-    try {
-      const result = await api('/api/images/zip', {
-        method: 'POST',
-        body: {
-          job_id: state.images.jobId,
-          image_ids: Array.from(state.images.selected),
-        },
-        timeout: 240000,
-      });
-      const url = result.download_url;
-      els.zipReady.hidden = false;
-      const skipped = Number(result.skipped) || 0;
-      els.zipReadyText.textContent = skipped
-        ? `ZIP ready · ${result.count} images (${skipped} skipped)`
-        : `ZIP ready · ${result.count} ${result.count === 1 ? 'image' : 'images'}`;
-      els.zipLink.href = url;
-      els.zipStatus.hidden = true;
-      triggerDownload(url);
-      if (skipped) {
-        toast(`ZIP ready. ${skipped} image${skipped === 1 ? '' : 's'} could not be downloaded.`, 'info', 5200);
-      } else {
-        toast('ZIP ready — download started.', 'success');
-      }
-      els.imagesLive.textContent = 'ZIP is ready.';
-    } catch (error) {
-      els.zipStatus.hidden = false;
-      els.zipStatus.textContent = error.message || 'The ZIP could not be created.';
-      toast(error.message || 'The ZIP could not be created.', 'error', 5200);
-    } finally {
-      state.images.zipBusy = false;
-      setButtonLoading(els.zipBtn, false);
-      updateImageSelection();
-    }
-  }
-
-  // ---------------------------------------------------------------------
   // Health + init
   // ---------------------------------------------------------------------
+  function showToolVersions(ytdlp) {
+    els.toolVersions.textContent = `yt-dlp ${ytdlp || '?'}`;
+  }
+
+  async function updateTools() {
+    els.updateTools.disabled = true;
+    els.updateTools.textContent = 'Updating…';
+    els.updateStatus.textContent = '';
+    try {
+      const result = await api('/api/tools/update', { method: 'POST', timeout: 330000 });
+      els.updateStatus.textContent = result.message;
+      showToolVersions(result.yt_dlp);
+    } catch (error) {
+      els.updateStatus.textContent = error.message || 'Could not update. Try again later.';
+    } finally {
+      els.updateTools.disabled = false;
+      els.updateTools.textContent = 'Update tools';
+    }
+  }
+
   async function loadHealth() {
     try {
       const health = await api('/api/health', { timeout: 10000 });
       state.health = health;
+      showToolVersions(health.yt_dlp?.version);
       els.ffmpegWarning.hidden = Boolean(health.ffmpeg?.available);
       if (!health.ffmpeg?.available) {
         els.ffmpegWarning.hidden = false;
-      }
-      if (health.gallery_dl?.available === false) {
-        els.imagesHint.textContent = 'Using the built-in page scanner. Install gallery-dl for richer gallery support.';
       }
     } catch (_) {
       // Health is advisory; don't block the UI if it fails.
@@ -1020,44 +735,17 @@
 
   function init() {
     setupTheme();
-    setupTabs();
     setupUrlField(els.videoUrl, els.videoPaste, els.videoClear, els.videoUrlError);
-    setupUrlField(els.imagesUrl, els.imagesPaste, els.imagesClear, els.imagesUrlError);
 
     els.videoForm.addEventListener('submit', handleVideoSubmit);
-    els.imagesForm.addEventListener('submit', handleImagesSubmit);
     els.videoRetry.addEventListener('click', () => els.videoForm.requestSubmit());
-    els.imagesRetry.addEventListener('click', () => els.imagesForm.requestSubmit());
     els.videoDownload.addEventListener('click', startVideoDownload);
     els.videoQuality.addEventListener('change', updateFormatHint);
-    els.selectAll.addEventListener('click', () => {
-      state.images.selected = new Set(state.images.images.map((image) => image.id));
-      syncImageCardStates();
-      updateImageSelection();
-    });
-    els.clearAll.addEventListener('click', () => {
-      state.images.selected = new Set();
-      syncImageCardStates();
-      updateImageSelection();
-    });
-    els.zipBtn.addEventListener('click', downloadZip);
+    els.updateTools.addEventListener('click', updateTools);
 
     setVideoPhase('idle');
-    setImagesPhase('idle');
     updateFetchButtons();
     loadHealth();
-  }
-
-  function syncImageCardStates() {
-    const cards = els.imageGrid.querySelectorAll('.image-card');
-    state.images.images.forEach((image, index) => {
-      const card = cards[index];
-      if (!card) return;
-      const checkbox = card.querySelector('input[type="checkbox"]');
-      const selected = state.images.selected.has(image.id);
-      if (checkbox) checkbox.checked = selected;
-      card.classList.toggle('is-selected', selected);
-    });
   }
 
   init();

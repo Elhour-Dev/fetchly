@@ -1,4 +1,4 @@
-"""Fetchly - a small, self-hosted video and image downloader.
+"""Fetchly - a small, self-hosted video downloader.
 
 The backend intentionally keeps all state in memory. It is designed for a
 single-user local deployment: jobs are UUID-addressed, generated files expire
@@ -19,13 +19,15 @@ import mimetypes
 import os
 import re
 import secrets
+import importlib
 import shutil
 import socket
+import subprocess
+import sys
 import threading
 import time
 import unicodedata
 import uuid
-import zipfile
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -34,32 +36,20 @@ from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
+# Desktop app: use the newest downloaded tools (yt-dlp) if present.
+TOOLS_DIR = Path(os.environ["FETCHLY_TOOLS_DIR"]) if os.getenv("FETCHLY_TOOLS_DIR") else None
+if TOOLS_DIR and (TOOLS_DIR / "current").is_dir():
+    sys.path.insert(0, str(TOOLS_DIR / "current"))
 import yt_dlp
-from bs4 import BeautifulSoup
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
-
-try:
-    from gallery_dl import config as gallery_config
-    from gallery_dl import exception as gallery_exception
-    from gallery_dl import extractor as gallery_extractor
-    from gallery_dl import job as gallery_job
-    from gallery_dl.extractor.message import Message as GalleryMessage
-
-    GALLERY_DL_AVAILABLE = True
-    GALLERY_DL_IMPORT_ERROR: str | None = None
-except Exception as exc:  # pragma: no cover - depends on optional install state
-    gallery_config = gallery_exception = gallery_extractor = gallery_job = None
-    GalleryMessage = None
-    GALLERY_DL_AVAILABLE = False
-    GALLERY_DL_IMPORT_ERROR = str(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -69,13 +59,20 @@ except Exception as exc:  # pragma: no cover - depends on optional install state
 APP_NAME = "Fetchly"
 APP_VERSION = "1.0.0"
 BASE_DIR = Path(__file__).resolve().parent
-DOWNLOADS_DIR = BASE_DIR / "downloads"
+# Desktop app (Electron wrapper): per-user data folder and updated tools.
+DATA_DIR = Path(os.getenv("FETCHLY_DATA_DIR") or BASE_DIR)
+DOWNLOADS_DIR = DATA_DIR / "downloads"
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
 # Optional Netscape-format cookie jar used to authenticate yt-dlp requests.
 # It is applied only when present; a missing file is a warning, never a crash.
-COOKIES_FILE = BASE_DIR / "cookies.txt"
+COOKIES_FILE = DATA_DIR / "cookies.txt"
+
+# Optional: read cookies straight from a browser on this computer (local use).
+# Example: FETCHLY_COOKIES_BROWSER=chrome  (also: firefox, edge, brave, opera...)
+# Nothing is copied or saved by Fetchly; the tools read the browser when needed.
+COOKIES_BROWSER = os.getenv("FETCHLY_COOKIES_BROWSER", "").strip().lower()
 
 # Optional HTTP Basic Auth for public deployments. Leave unset for local use.
 APP_USERNAME = os.getenv("FETCHLY_USERNAME", "fetchly")
@@ -92,17 +89,11 @@ def _env_int(name: str, default: int, minimum: int = 1) -> int:
 
 DOWNLOAD_TTL_SECONDS = _env_int("DOWNLOAD_TTL_SECONDS", 60 * 60, minimum=60)
 CLEANUP_INTERVAL_SECONDS = _env_int("CLEANUP_INTERVAL_SECONDS", 10 * 60, minimum=30)
-MAX_IMAGE_COUNT = _env_int("MAX_IMAGE_COUNT", 100, minimum=1)
-MAX_IMAGE_DOWNLOAD_BYTES = _env_int("MAX_IMAGE_DOWNLOAD_BYTES", 25 * 1024 * 1024, minimum=1024)
-MAX_PAGE_BYTES = _env_int("MAX_PAGE_BYTES", 8 * 1024 * 1024, minimum=1024)
 MAX_PREVIEW_BYTES = _env_int("MAX_PREVIEW_BYTES", 20 * 1024 * 1024, minimum=1024)
-MAX_ZIP_TOTAL_BYTES = _env_int("MAX_ZIP_TOTAL_BYTES", 300 * 1024 * 1024, minimum=1024)
 VIDEO_INFO_TIMEOUT_SECONDS = _env_int("VIDEO_INFO_TIMEOUT_SECONDS", 90, minimum=10)
-IMAGE_EXTRACT_TIMEOUT_SECONDS = _env_int("IMAGE_EXTRACT_TIMEOUT_SECONDS", 60, minimum=10)
-GALLERY_EXTRACT_TIMEOUT_SECONDS = _env_int("GALLERY_EXTRACT_TIMEOUT_SECONDS", 50, minimum=10)
 MAX_REDIRECTS = 5
 HOST = os.getenv("HOST", "127.0.0.1")
-PORT = _env_int("PORT", 8000, minimum=1)
+PORT = _env_int("PORT", 8001, minimum=1)
 
 # A normal browser UA avoids many naive bot blocks while still being honest in
 # the README that this is a local downloader and not a crawler.
@@ -142,17 +133,15 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)-8s %(name)s: %(message)s",
 )
 logger = logging.getLogger("fetchly")
-if GALLERY_DL_AVAILABLE:
-    # gallery-dl is a library here; its CLI-oriented logger is noisy.
-    logging.getLogger("gallery-dl").setLevel(logging.ERROR)
 
 
 class FriendlyError(Exception):
     """An expected error whose message is safe to show to the user."""
 
-    def __init__(self, message: str, status_code: int = 400, code: str = "request_failed"):
+    def __init__(self, message: str, status_code: int = 400, code: str = "request_failed", detail: str = ""):
         super().__init__(message)
         self.message = message
+        self.detail = detail
         self.status_code = status_code
         self.code = code
 
@@ -160,14 +149,6 @@ class FriendlyError(Exception):
 class MediaFetchError(FriendlyError):
     def __init__(self, message: str, status_code: int = 502):
         super().__init__(message, status_code=status_code, code="media_fetch_failed")
-
-
-class DirectImageFound(MediaFetchError):
-    """Raised when the supplied URL is itself an image rather than a page."""
-
-    def __init__(self, url: str):
-        super().__init__("That URL is a direct image.", 200)
-        self.url = url
 
 
 # ---------------------------------------------------------------------------
@@ -243,32 +224,18 @@ def sanitize_filename(
     return f"{clean}{ext}"
 
 
-def filename_from_url(url: str, *, fallback: str = "image") -> str:
-    try:
-        raw = unquote(Path(urlsplit(url).path).name)
-    except Exception:
-        raw = ""
-    return sanitize_filename(raw, fallback=fallback, max_length=90)
-
-
-def page_title_or_slug(title: str | None, url: str) -> str:
-    """Prefer a human page title, falling back to a readable URL slug."""
-    value = (title or "").strip()
-    lowered = value.lower()
-    bad_title = (
-        not value
-        or lowered.startswith("file:")
-        or lowered.endswith(tuple(IMAGE_EXTENSIONS | VIDEO_EXTENSIONS))
-    )
-    if not bad_title:
-        return value[:200]
-    try:
-        slug = unquote(Path(urlsplit(url).path).stem).replace("_", " ").strip()
-    except Exception:
-        slug = ""
-    if slug:
-        return slug[:200]
-    return (urlsplit(url).hostname or "Images")[:200]
+LOGIN_HELP = (
+    "This site needs a login. Log in to it in Firefox, then open Help > Cookies and press "
+    "\"Use Firefox cookies\". Then try again."
+)
+INSTAGRAM_LOGIN_HELP = (
+    "Instagram needs a login. Log in to Instagram in Firefox, then open Help > Cookies and "
+    "press \"Use Firefox cookies\". Then try again."
+)
+LOGIN_HELP_BOT = (
+    "YouTube wants to confirm you're not a bot. Sign in to YouTube in your browser, "
+    "then start Fetchly with FETCHLY_COOKIES_BROWSER=chrome (or firefox, edge) and try again."
+)
 
 
 def _strip_ansi(value: str) -> str:
@@ -287,8 +254,13 @@ def friendly_ytdlp_error(exc: Exception) -> str:
         (("private video",), "This video is private, so it can't be downloaded."),
         (("members-only",), "This video is members-only and needs an account."),
         (("age-restricted",), "This video is age-restricted and can't be fetched without a signed-in session."),
-        (("sign in to confirm",), "The site is asking for a sign-in check. Try again later or use a different link."),
-        (("not a bot",), "The site is asking for a bot check. Try again later or use a different link."),
+        (("sign in to confirm",), LOGIN_HELP_BOT),
+        (("not a bot",), LOGIN_HELP_BOT),
+        (("authentication is required",), LOGIN_HELP),
+        (("login required",), LOGIN_HELP),
+        (("log in",), LOGIN_HELP),
+        (("empty media response",), LOGIN_HELP),
+        (("--cookies",), LOGIN_HELP),
         (("video unavailable",), "This video isn't available. It may have been removed or blocked in your region."),
         (("this video is not available",), "This video isn't available in your region."),
         (("unsupported url",), "This site isn't supported. Paste a direct video or a supported page URL."),
@@ -453,10 +425,6 @@ class Job:
     })
     video: dict[str, Any] | None = None
     thumbnail_url: str | None = None
-    page_title: str | None = None
-    images: list[dict[str, Any]] = field(default_factory=list)
-    image_map: dict[str, dict[str, Any]] = field(default_factory=dict)
-    zip_source_job: str | None = None
 
     def public_status(self) -> dict[str, Any]:
         return {
@@ -468,7 +436,6 @@ class Job:
             "download_url": f"/api/download/{self.id}" if self.state == "complete" and self.file_path else None,
             "file_name": self.download_name,
             "expires_at": iso(self.expires_at),
-            "image_count": len(self.images),
         }
 
 
@@ -743,28 +710,6 @@ async def fetch_public_bytes(
     raise MediaFetchError("Too many redirects. Try a different link.", 400)
 
 
-async def fetch_page_html(url: str) -> tuple[str, str]:
-    data, final_url, content_type = await fetch_public_bytes(
-        url,
-        max_bytes=MAX_PAGE_BYTES,
-        accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
-        timeout=30.0,
-    )
-    if "html" not in content_type and not data.lstrip().startswith(b"<"):
-        if content_type.startswith("image/") or Path(urlsplit(final_url).path).suffix.lower() in IMAGE_EXTENSIONS:
-            raise DirectImageFound(final_url)
-        raise MediaFetchError("That link doesn't point to a web page.", 400)
-    try:
-        html = data.decode("utf-8")
-    except UnicodeDecodeError:
-        html = data.decode("utf-8", errors="replace")
-    return html, final_url
-
-
-# ---------------------------------------------------------------------------
-# Image identification and HTML parsing
-# ---------------------------------------------------------------------------
-
 def inspect_image_bytes(data: bytes) -> tuple[str, str]:
     """Verify that bytes are a raster image and return (extension, mime)."""
     try:
@@ -779,444 +724,107 @@ def inspect_image_bytes(data: bytes) -> tuple[str, str]:
     return info[1], info[0]
 
 
-def _parse_srcset(value: str | None) -> list[tuple[int, str]]:
-    if not value:
-        return []
-    candidates: list[tuple[int, str]] = []
-    for item in value.split(","):
-        parts = item.strip().split()
-        if not parts:
-            continue
-        source = parts[0]
-        score = 1
-        if len(parts) > 1:
-            descriptor = parts[1].lower()
-            try:
-                if descriptor.endswith("w"):
-                    score = int(float(descriptor[:-1]))
-                elif descriptor.endswith("x"):
-                    score = int(float(descriptor[:-1]) * 1000)
-            except ValueError:
-                score = 1
-        candidates.append((score, source))
-    return candidates
-
-
-def _looks_like_ui_asset(url: str, classes: str, alt: str, width: int | None, height: int | None) -> bool:
-    haystack = f"{url} {classes} {alt}".lower()
-    tokens = ("logo", "favicon", "sprite", "icon", "avatar", "emoji", "badge", "tracking", "pixel")
-    if any(token in haystack for token in tokens):
-        return True
-    if width is not None and height is not None and (width <= 2 or height <= 2):
-        return True
-    return False
-
-
-def _meta_content(soup: BeautifulSoup, *, prop: str | None = None, name: str | None = None) -> list[str]:
-    values: list[str] = []
-    attrs_list: list[dict[str, str]] = []
-    if prop:
-        attrs_list.append({"property": prop})
-        attrs_list.append({"name": prop})
-    if name:
-        attrs_list.append({"name": name})
-        attrs_list.append({"property": name})
-    for attrs in attrs_list:
-        for tag in soup.find_all("meta", attrs=attrs):
-            content = (tag.get("content") or "").strip()
-            if content:
-                values.append(content)
-    return values
-
-
-def _json_ld_image_urls(soup: BeautifulSoup) -> list[str]:
-    results: list[str] = []
-
-    def walk(value: Any) -> None:
-        if isinstance(value, dict):
-            for key, item in value.items():
-                if key.lower() == "image":
-                    if isinstance(item, str):
-                        results.append(item)
-                    elif isinstance(item, list):
-                        for nested in item:
-                            if isinstance(nested, str):
-                                results.append(nested)
-                            elif isinstance(nested, dict) and isinstance(nested.get("url"), str):
-                                results.append(nested["url"])
-                    elif isinstance(item, dict) and isinstance(item.get("url"), str):
-                        results.append(item["url"])
-                else:
-                    walk(item)
-        elif isinstance(value, list):
-            for item in value:
-                walk(item)
-
-    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
-        raw = script.string or script.get_text() or ""
-        if not raw.strip():
-            continue
-        try:
-            walk(json.loads(raw))
-        except (json.JSONDecodeError, TypeError):
-            continue
-    return results
-
-
-def parse_html_images(html: str, page_url: str) -> tuple[list[dict[str, Any]], str, int]:
-    """Extract likely content images from an arbitrary page.
-
-    gallery-dl handles known gallery sites. This parser is the fallback for
-    everything else and explicitly supports srcset, lazy-load attributes,
-    <picture>, social metadata and JSON-LD images.
-    """
-    try:
-        soup = BeautifulSoup(html, "lxml")
-    except Exception:
-        soup = BeautifulSoup(html, "html.parser")
-
-    title = ""
-    for candidate in (
-        *_meta_content(soup, prop="og:title"),
-        *_meta_content(soup, name="twitter:title"),
-    ):
-        if candidate:
-            title = candidate
-            break
-    if not title and soup.title and soup.title.string:
-        title = soup.title.string.strip()
-    if not title:
-        title = urlsplit(page_url).hostname or "Images"
-
-    base_url = page_url
-    base_tag = soup.find("base", href=True)
-    if base_tag:
-        possible_base = urljoin(page_url, base_tag["href"])
-        if urlsplit(possible_base).scheme in {"http", "https"}:
-            base_url = possible_base
-
-    seen: dict[str, dict[str, Any]] = {}
-    order = 0
-
-    def add(
-        raw_url: str | None,
-        *,
-        score: int,
-        alt: str = "",
-        width: int | None = None,
-        height: int | None = None,
-        origin: str = "img",
-    ) -> None:
-        nonlocal order
-        if not raw_url:
-            return
-        raw_url = raw_url.strip()
-        if not raw_url or raw_url.startswith(("data:", "blob:", "javascript:", "#")):
-            return
-        try:
-            absolute = urljoin(base_url, raw_url)
-            parts = urlsplit(absolute)
-        except ValueError:
-            return
-        if parts.scheme.lower() not in {"http", "https"} or not parts.netloc:
-            return
-        if parts.username or parts.password:
-            return
-        try:
-            _ = parts.port
-        except ValueError:
-            return
-        cleaned = urlunsplit((parts.scheme.lower(), parts.netloc, parts.path, parts.query, ""))
-        existing = seen.get(cleaned)
-        if existing:
-            existing["score"] = max(existing["score"], score)
-            if alt and not existing["alt"]:
-                existing["alt"] = alt
-            return
-        seen[cleaned] = {
-            "url": cleaned,
-            "score": score,
-            "alt": alt[:300],
-            "width": width,
-            "height": height,
-            "origin": origin,
-            "order": order,
-        }
-        order += 1
-
-    # Social / structured metadata is usually the publisher's chosen hero image.
-    for meta_url in (
-        *_meta_content(soup, prop="og:image"),
-        *_meta_content(soup, name="twitter:image"),
-    ):
-        add(meta_url, score=1000, origin="meta")
-    for meta_url in _json_ld_image_urls(soup)[:10]:
-        add(meta_url, score=900, origin="json_ld")
-    link_image = soup.find("link", rel=lambda value: value and "image_src" in value, href=True)
-    if link_image:
-        add(link_image.get("href"), score=850, origin="meta")
-
-    for image in soup.find_all("img"):
-        classes = " ".join(image.get("class") or [])
-        alt = (image.get("alt") or "").strip()
-        width = _coerce_int(image.get("width"))
-        height = _coerce_int(image.get("height"))
-        if width is None:
-            width = _coerce_int(image.get("data-width"))
-        if height is None:
-            height = _coerce_int(image.get("data-height"))
-
-        sources: list[tuple[int, str]] = []
-        for attr in ("data-srcset", "data-lazy-srcset", "srcset"):
-            for descriptor_score, source in _parse_srcset(image.get(attr)):
-                sources.append((5000 + descriptor_score, source))
-        for attr in ("data-src", "data-original", "data-lazy-src", "data-url", "data-image"):
-            value = (image.get(attr) or "").strip()
-            if value:
-                sources.append((4000, value))
-        src = (image.get("src") or "").strip()
-        if src:
-            sources.append((100, src))
-        if not sources:
-            continue
-        _, best_source = max(sources, key=lambda item: item[0])
-
-        score = 40
-        if alt:
-            score += 12
-        if width and height:
-            if min(width, height) < 32:
-                score -= 90
-            if width >= 800 or height >= 500:
-                score += 45
-            elif width >= 400:
-                score += 20
-        if any(attr in image.attrs for attr in ("srcset", "data-srcset", "data-src", "data-original")):
-            score += 20
-        for parent in image.parents:
-            if getattr(parent, "name", None) in {"article", "main", "figure"}:
-                score += 25
-                break
-            if getattr(parent, "name", None) in {"nav", "header", "footer"}:
-                score -= 40
-                break
-        suffix = Path(urlsplit(best_source).path).suffix.lower()
-        if suffix in IMAGE_EXTENSIONS:
-            score += 10
-        if _looks_like_ui_asset(best_source, classes, alt, width, height):
-            score -= 140
-        add(best_source, score=score, alt=alt, width=width, height=height)
-
-    for source_tag in soup.find_all("source"):
-        srcset = source_tag.get("srcset") or source_tag.get("data-srcset")
-        parsed = _parse_srcset(srcset)
-        if parsed:
-            _, best_source = max(parsed, key=lambda item: item[0])
-            add(best_source, score=55, origin="picture")
-
-    # Linked full-size image files are a useful fallback on gallery pages.
-    for anchor in soup.find_all("a", href=True):
-        href = anchor.get("href") or ""
-        suffix = Path(urlsplit(href).path).suffix.lower()
-        if suffix in IMAGE_EXTENSIONS:
-            add(href, score=30, origin="link")
-
-    candidates = [
-        item for item in seen.values()
-        if item["score"] >= 0
-    ]
-    candidates.sort(key=lambda item: (-item["score"], item["order"]))
-
-    images: list[dict[str, Any]] = []
-    for item in candidates[:MAX_IMAGE_COUNT]:
-        images.append({
-            "url": item["url"],
-            "filename": filename_from_url(item["url"]),
-            "alt": item["alt"],
-            "width": item["width"],
-            "height": item["height"],
-        })
-    return images, title[:200], len(candidates)
-
-
 # ---------------------------------------------------------------------------
-# gallery-dl integration
+# Update tools (yt-dlp)
 # ---------------------------------------------------------------------------
 
-if GALLERY_DL_AVAILABLE:
-    class _LimitedDataJob(gallery_job.DataJob):  # type: ignore[misc]
-        """Collect image URLs without downloading files, capped at max_items."""
-
-        def __init__(self, url, parent=None, file=None, ensure_ascii=True, resolve=False, max_items=MAX_IMAGE_COUNT):
-            self.max_items = max_items
-            super().__init__(
-                url,
-                parent=parent,
-                file=file,
-                ensure_ascii=ensure_ascii,
-                resolve=resolve,
-            )
-
-        def handle_url(self, url, kwdict):
-            if len(self.data_urls) >= self.max_items:
-                raise gallery_exception.StopExtraction()
-            super().handle_url(url, kwdict)
-            if len(self.data_urls) >= self.max_items:
-                raise gallery_exception.StopExtraction()
-else:
-    _LimitedDataJob = None  # type: ignore[assignment]
+_update_lock = threading.Lock()
 
 
-def configure_gallery_dl() -> None:
-    if not GALLERY_DL_AVAILABLE:
-        return
+def _tool_version() -> str | None:
+    return getattr(getattr(yt_dlp, "version", None), "__version__", None)
+
+
+def _reload_tools() -> None:
+    """Load the freshly installed yt-dlp without a restart."""
+    global yt_dlp
+    for name in list(sys.modules):
+        if name.split(".")[0] == "yt_dlp":
+            del sys.modules[name]
+    importlib.invalidate_caches()
+    import yt_dlp as new_yt_dlp
+    yt_dlp = new_yt_dlp
+
+
+def _update_message(before: str | None, after: str | None, backup: bool = False) -> str:
+    if before == after:
+        return f"Already up to date (yt-dlp {after})"
+    return f"Updated yt-dlp to version {after}." + (" Old version kept as backup." if backup else "")
+
+
+def _update_tools_desktop(before: str | None) -> dict[str, Any]:
+    """Desktop app: install the new yt-dlp into the app data folder, keep a backup,
+    and go back to the old version if anything fails. No admin rights needed."""
+    assert TOOLS_DIR is not None
+    new, current, backup = TOOLS_DIR / "new", TOOLS_DIR / "current", TOOLS_DIR / "backup"
+    TOOLS_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(new, ignore_errors=True)
     try:
-        gallery_config.set(("extractor",), "timeout", 20)
-        gallery_config.set(("extractor",), "retries", 1)
-        gallery_config.set(("extractor",), "user-agent", USER_AGENT)
-        gallery_config.set(("extractor",), "sleep-request", 0.1)
-    except Exception:
-        logger.debug("Could not tune gallery-dl configuration", exc_info=True)
-
-
-def _extract_gallery_images_sync(url: str) -> dict[str, Any] | None:
-    """Use gallery-dl for sites with a dedicated extractor.
-
-    gallery-dl's generic extractor is intentionally broad, so generic pages go
-    through parse_html_images() instead. Site-specific extractors are very good
-    at finding the actual gallery images and get a DataJob in no-download mode.
-    """
-    if not GALLERY_DL_AVAILABLE:
-        return None
+        proc = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-U", "--disable-pip-version-check",
+             "--target", str(new), "yt-dlp"],
+            capture_output=True, text=True, timeout=300,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(new, ignore_errors=True)
+        raise FriendlyError("The update took too long. Check your internet and try again.", 504, "update_timeout") from None
+    if proc.returncode != 0:
+        logger.warning("Tool update failed: %s", proc.stderr[-500:])
+        shutil.rmtree(new, ignore_errors=True)
+        raise FriendlyError("Couldn't update. No internet? Your old version still works.", 500, "update_failed")
+    # Swap: current -> backup, new -> current.
+    shutil.rmtree(backup, ignore_errors=True)
+    if current.exists():
+        current.rename(backup)
+    new.rename(current)
+    if str(current) not in sys.path:
+        sys.path.insert(0, str(current))
     try:
-        extractor = gallery_extractor.find(url)
+        _reload_tools()
+        after = _tool_version()
+        if not after:
+            raise RuntimeError("yt-dlp did not load")
     except Exception:
-        logger.debug("gallery-dl extractor lookup failed", exc_info=True)
-        return None
-    if extractor is None:
-        return None
-    if getattr(extractor, "category", "") in {"generic", "recursive"}:
-        return None
+        logger.warning("New yt-dlp failed to load; going back to the old version", exc_info=True)
+        shutil.rmtree(current, ignore_errors=True)
+        if backup.exists():
+            backup.rename(current)
+        else:
+            with contextlib.suppress(ValueError):
+                sys.path.remove(str(current))
+        with contextlib.suppress(Exception):
+            _reload_tools()
+        raise FriendlyError("The new version did not work, so the old one is back.", 500, "update_rolled_back") from None
+    return {"message": _update_message(before, after, True), "yt_dlp": after}
 
+
+def _update_tools_sync() -> dict[str, Any]:
+    if not _update_lock.acquire(blocking=False):
+        raise FriendlyError("An update is already running. Please wait.", 409, "update_busy")
     try:
-        collector = _LimitedDataJob(extractor, file=None, resolve=True, max_items=MAX_IMAGE_COUNT)
-        collector.run()
-    except Exception:
-        logger.debug("gallery-dl extraction failed", exc_info=True)
-        return None
-
-    title = ""
-    images: list[dict[str, Any]] = []
-    seen: set[str] = set()
-
-    for message in collector.data:
-        if len(images) >= MAX_IMAGE_COUNT:
-            break
-        if not message:
-            continue
-        if GalleryMessage and message[0] == GalleryMessage.Directory and len(message) > 1:
-            metadata = message[1] or {}
-            title = title or str(
-                metadata.get("title") or metadata.get("og_title") or metadata.get("name") or ""
-            )
-            continue
-        if not GalleryMessage or message[0] != GalleryMessage.Url or len(message) < 2:
-            continue
-        image_url = message[1]
-        metadata = message[2] if len(message) > 2 and isinstance(message[2], dict) else {}
-        if not isinstance(image_url, str):
-            continue
+        before = _tool_version()
+        if TOOLS_DIR:
+            return _update_tools_desktop(before)
         try:
-            parts = urlsplit(image_url)
-        except ValueError:
-            continue
-        if parts.scheme.lower() not in {"http", "https"} or not parts.netloc:
-            continue
-
-        extension = str(metadata.get("extension") or "").lower().lstrip(".")
-        path_suffix = Path(parts.path).suffix.lower().lstrip(".")
-        if extension in {item.lstrip(".") for item in VIDEO_EXTENSIONS}:
-            continue
-        if path_suffix in {item.lstrip(".") for item in VIDEO_EXTENSIONS}:
-            continue
-        if extension and extension not in {item.lstrip(".") for item in IMAGE_EXTENSIONS}:
-            if path_suffix not in {item.lstrip(".") for item in IMAGE_EXTENSIONS}:
-                continue
-        if path_suffix and path_suffix not in {item.lstrip(".") for item in IMAGE_EXTENSIONS}:
-            if extension not in {item.lstrip(".") for item in IMAGE_EXTENSIONS}:
-                continue
-
-        normalized = urlunsplit((parts.scheme.lower(), parts.netloc, parts.path, parts.query, ""))
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        suggested = metadata.get("filename") or filename_from_url(normalized)
-        images.append({
-            "url": normalized,
-            "filename": sanitize_filename(str(suggested), fallback="image", max_length=90),
-            "alt": str(metadata.get("title") or metadata.get("description") or "")[:300],
-            "width": _coerce_int(metadata.get("width")),
-            "height": _coerce_int(metadata.get("height")),
-        })
-
-    if not images:
-        return None
-    return {"images": images, "title": page_title_or_slug(title, url)}
-
-
-async def extract_gallery_images(url: str) -> dict[str, Any] | None:
-    if not GALLERY_DL_AVAILABLE:
-        return None
-    try:
-        return await asyncio.wait_for(
-            asyncio.to_thread(_extract_gallery_images_sync, url),
-            timeout=GALLERY_EXTRACT_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        logger.info("gallery-dl timed out for %s; trying generic HTML", url)
-        return None
-    except Exception:
-        logger.debug("gallery-dl failed for %s", url, exc_info=True)
-        return None
-
-
-async def extract_images(url: str) -> dict[str, Any]:
-    """Try a dedicated gallery extractor first, then a safe HTML fallback."""
-    gallery_result = await extract_gallery_images(url)
-    if gallery_result and gallery_result.get("images"):
-        return {
-            "images": gallery_result["images"],
-            "title": gallery_result.get("title") or (urlsplit(url).hostname or "Images"),
-            "extractor": "gallery-dl",
-            "total_found": len(gallery_result["images"]),
-        }
-
-    try:
-        html, final_url = await fetch_page_html(url)
-        images, title, total_found = parse_html_images(html, final_url)
-    except DirectImageFound as exc:
-        images = [{
-            "url": exc.url,
-            "filename": filename_from_url(exc.url),
-            "alt": "",
-            "width": None,
-            "height": None,
-        }]
-        title = filename_from_url(exc.url)
-        total_found = 1
-
-    if not images:
-        raise FriendlyError(
-            "No images were found on that page. Try a gallery, article, or direct image link.",
-            422,
-            "no_images",
-        )
-    return {
-        "images": images,
-        "title": title,
-        "extractor": "html",
-        "total_found": total_found,
-    }
+            proc = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-U", "--disable-pip-version-check", "yt-dlp"],
+                capture_output=True, text=True, timeout=300,
+            )
+        except subprocess.TimeoutExpired:
+            raise FriendlyError("The update took too long. Check your internet and try again.", 504, "update_timeout") from None
+        if proc.returncode != 0:
+            logger.warning("Tool update failed: %s", proc.stderr[-500:])
+            raise FriendlyError(
+                "Couldn't update here (no internet or no permission). Try running: pip install -U yt-dlp",
+                500,
+                "update_failed",
+            )
+        _reload_tools()
+        after = _tool_version()
+        return {"message": _update_message(before, after), "yt_dlp": after}
+    finally:
+        _update_lock.release()
 
 
 # ---------------------------------------------------------------------------
@@ -1346,6 +954,9 @@ def _cookie_options() -> dict[str, str]:
     except OSError:
         has_cookies = False
 
+    # A browser you picked wins over cookies.txt.
+    if COOKIES_BROWSER:
+        return {"cookiesfrombrowser": (COOKIES_BROWSER,)}
     if has_cookies:
         return {"cookiefile": str(COOKIES_FILE)}
 
@@ -1414,15 +1025,14 @@ def extract_video_info_sync(url: str) -> dict[str, Any]:
     has_playable_format = any(
         fmt.get("vcodec") not in (None, "none")
         or fmt.get("acodec") not in (None, "none")
+        # Direct files (plain .mp4 links etc.) often have no codec info at all.
+        or (fmt.get("url") and fmt.get("ext") not in {"mhtml", "none"} and fmt.get("protocol") != "mhtml")
         for fmt in formats
     )
     if not has_playable_format:
-        raise FriendlyError(
-            "YouTube didn't return any playable formats. Refresh cookies.txt "
-            "from a signed-in browser and try again.",
-            422,
-            "no_formats",
-        )
+        if "youtube" in str(info.get("extractor_key") or "").lower():
+            raise FriendlyError(LOGIN_HELP_BOT, 422, "no_formats")
+        raise FriendlyError("No video was found in this link.", 422, "no_formats")
 
     title = str(info.get("title") or "Untitled video").strip()[:300]
     thumbnail = info.get("thumbnail")
@@ -1637,7 +1247,6 @@ async def lifespan(_: FastAPI):
     _materialize_cookies_from_env()
     if _cookie_options():
         logger.info("Using yt-dlp cookies from %s", COOKIES_FILE)
-    configure_gallery_dl()
     _http_client = httpx.AsyncClient(
         follow_redirects=False,
         timeout=httpx.Timeout(30.0, connect=10.0),
@@ -1673,7 +1282,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title=APP_NAME,
     version=APP_VERSION,
-    description="A local video and image downloader built with yt-dlp and gallery-dl.",
+    description="A local video downloader built with yt-dlp.",
     lifespan=lifespan,
 )
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -1725,16 +1334,11 @@ class VideoDownloadRequest(BaseModel):
     quality: str = Field(min_length=1, max_length=16)
 
 
-class ImageZipRequest(BaseModel):
-    job_id: str = Field(min_length=1, max_length=64)
-    image_ids: list[str] = Field(min_length=1, max_length=MAX_IMAGE_COUNT)
-
-
 @app.exception_handler(FriendlyError)
 async def friendly_error_handler(_: Request, exc: FriendlyError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.code, "message": exc.message},
+        content={"error": exc.code, "message": exc.message, "detail": exc.detail},
     )
 
 
@@ -1782,18 +1386,6 @@ def get_job_or_404(job_id: str) -> Job:
     return job
 
 
-def _public_image(job_id: str, image: dict[str, Any], index: int) -> dict[str, Any]:
-    image_id = image["id"]
-    return {
-        "id": image_id,
-        "alt": image.get("alt") or f"Image {index + 1}",
-        "filename": image.get("filename") or f"image-{index + 1}",
-        "preview_url": f"/api/images/{job_id}/{image_id}/preview",
-        "width": image.get("width"),
-        "height": image.get("height"),
-    }
-
-
 # ---------------------------------------------------------------------------
 # Routes: pages and health
 # ---------------------------------------------------------------------------
@@ -1811,11 +1403,6 @@ async def favicon() -> FileResponse:
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
     ffmpeg = shutil.which("ffmpeg")
-    gallery_version = None
-    if GALLERY_DL_AVAILABLE:
-        with contextlib.suppress(Exception):
-            from gallery_dl.version import __version__ as gallery_version_import
-            gallery_version = gallery_version_import
     return {
         "status": "ok",
         "version": APP_VERSION,
@@ -1823,19 +1410,87 @@ async def health() -> dict[str, Any]:
             "available": bool(ffmpeg),
             "path": ffmpeg,
         },
-        "gallery_dl": {
-            "available": GALLERY_DL_AVAILABLE,
-            "version": gallery_version,
-        },
         "yt_dlp": {
             "version": getattr(getattr(yt_dlp, "version", None), "__version__", None),
         },
         "limits": {
             "download_ttl_seconds": DOWNLOAD_TTL_SECONDS,
-            "max_images": MAX_IMAGE_COUNT,
-            "max_image_mb": round(MAX_IMAGE_DOWNLOAD_BYTES / (1024 * 1024), 1),
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Routes: login cookies (local use only; cookies are never logged or committed)
+# ---------------------------------------------------------------------------
+
+_COOKIE_BROWSERS = {"firefox", "chrome", "edge", "brave", "opera", "chromium", "vivaldi", "safari", "whale"}
+
+
+def _require_local(request: Request) -> None:
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        raise FriendlyError("Cookie settings can only be changed from the computer running Fetchly.", 403, "local_only")
+
+
+class CookieBrowserRequest(BaseModel):
+    browser: str = Field(min_length=1, max_length=20)
+
+
+class CookieFileRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=1_000_000)
+
+
+@app.get("/api/cookies")
+async def cookies_status(request: Request) -> dict[str, Any]:
+    _require_local(request)
+    return {"browser": COOKIES_BROWSER, "file": COOKIES_FILE.is_file()}
+
+
+@app.post("/api/cookies/browser")
+async def cookies_use_browser(payload: CookieBrowserRequest, request: Request) -> dict[str, Any]:
+    global COOKIES_BROWSER
+    _require_local(request)
+    name = payload.browser.strip().lower()
+    if name not in _COOKIE_BROWSERS:
+        raise FriendlyError("Pick a browser from the list.", 400, "bad_browser")
+    COOKIES_BROWSER = name
+    return {"browser": COOKIES_BROWSER, "file": COOKIES_FILE.is_file()}
+
+
+@app.post("/api/cookies/file")
+async def cookies_upload_file(payload: CookieFileRequest, request: Request) -> dict[str, Any]:
+    _require_local(request)
+    text = payload.text.replace("\r\n", "\n")
+    rows = [ln for ln in text.split("\n") if ln.strip() and (not ln.startswith("#") or ln.startswith("#HttpOnly_"))]
+    if not rows or not all(len(ln.split("\t")) == 7 for ln in rows):
+        raise FriendlyError(
+            "That does not look like a cookies.txt file (Netscape format). Export it again from your browser.",
+            400,
+            "bad_cookies_file",
+        )
+    COOKIES_FILE.write_text(text.rstrip("\n") + "\n", encoding="utf-8")
+    try:
+        os.chmod(COOKIES_FILE, 0o600)
+    except OSError:
+        pass
+    return {"browser": COOKIES_BROWSER, "file": True}
+
+
+@app.delete("/api/cookies")
+async def cookies_clear(request: Request) -> dict[str, Any]:
+    global COOKIES_BROWSER
+    _require_local(request)
+    COOKIES_BROWSER = ""
+    try:
+        COOKIES_FILE.unlink()
+    except FileNotFoundError:
+        pass
+    return {"browser": "", "file": False}
+
+
+@app.post("/api/tools/update", dependencies=[Depends(rate_limit("tools-update", 3))])
+async def tools_update() -> dict[str, Any]:
+    return await asyncio.to_thread(_update_tools_sync)
 
 
 # ---------------------------------------------------------------------------
@@ -1845,6 +1500,8 @@ async def health() -> dict[str, Any]:
 @app.post("/api/video/info", dependencies=[Depends(rate_limit("video-info", 12))])
 async def video_info(payload: UrlRequest) -> dict[str, Any]:
     url = await ensure_public_url(payload.url)
+    if Path(urlsplit(url).path).suffix.lower() in IMAGE_EXTENSIONS:
+        raise FriendlyError("Fetchly downloads videos only.", 422, "videos_only")
     job = job_store.create(kind="video", url=url, state="fetching_info")
 
     try:
@@ -1884,7 +1541,9 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
         message = friendly_ytdlp_error(exc)
         job_store.fail(job.id, message)
         logger.info("Video info failed for %s: %s", url, message)
-        raise FriendlyError(message, 422, "video_info_failed") from None
+        raise FriendlyError(
+            message, 422, "video_info_failed", detail=_strip_ansi(str(exc)).strip()[:1500]
+        ) from None
 
 
 @app.post("/api/video/download", dependencies=[Depends(rate_limit("video-download", 6))])
@@ -1944,244 +1603,6 @@ async def video_thumbnail(job_id: str) -> Response:
             "X-Content-Type-Options": "nosniff",
         },
     )
-
-
-# ---------------------------------------------------------------------------
-# Routes: images
-# ---------------------------------------------------------------------------
-
-@app.post("/api/images/extract", dependencies=[Depends(rate_limit("images-extract", 12))])
-async def images_extract(payload: UrlRequest) -> dict[str, Any]:
-    url = await ensure_public_url(payload.url)
-    job = job_store.create(kind="images", url=url, state="fetching_info")
-
-    try:
-        result = await asyncio.wait_for(
-            extract_images(url),
-            timeout=IMAGE_EXTRACT_TIMEOUT_SECONDS,
-        )
-        images: list[dict[str, Any]] = []
-        image_map: dict[str, dict[str, Any]] = {}
-        seen_ids: set[str] = set()
-        for image in result["images"][:MAX_IMAGE_COUNT]:
-            raw_url = image["url"]
-            image_id = hashlib.sha1(raw_url.encode("utf-8")).hexdigest()[:12]
-            suffix = 1
-            while image_id in seen_ids:
-                image_id = hashlib.sha1(f"{raw_url}:{suffix}".encode("utf-8")).hexdigest()[:12]
-                suffix += 1
-            seen_ids.add(image_id)
-            record = {
-                "id": image_id,
-                "url": raw_url,
-                "filename": image.get("filename") or filename_from_url(raw_url),
-                "alt": image.get("alt") or "",
-                "width": image.get("width"),
-                "height": image.get("height"),
-            }
-            images.append(record)
-            image_map[image_id] = record
-
-        job_store.update(
-            job.id,
-            state="ready",
-            images=images,
-            image_map=image_map,
-            page_title=result.get("title") or urlsplit(url).hostname or "Images",
-            expires_at=utc_now() + timedelta(seconds=DOWNLOAD_TTL_SECONDS),
-        )
-        return {
-            "job_id": job.id,
-            "state": "ready",
-            "page_title": job.page_title,
-            "extractor": result.get("extractor"),
-            "total_found": result.get("total_found", len(result["images"])),
-            "truncated": result.get("total_found", len(result["images"])) > MAX_IMAGE_COUNT,
-            "images": [_public_image(job.id, image, index) for index, image in enumerate(images)],
-        }
-    except asyncio.TimeoutError:
-        message = "That page took too long to scan. Try a smaller gallery or a direct link."
-        job_store.fail(job.id, message)
-        raise FriendlyError(message, 504, "timeout") from None
-    except FriendlyError as exc:
-        job_store.fail(job.id, exc.message)
-        raise
-    except Exception:
-        logger.exception("Image extraction failed for %s", url)
-        message = "We couldn't extract images from that page. Please try another link."
-        job_store.fail(job.id, message)
-        raise FriendlyError(message, 422, "image_extract_failed") from None
-
-
-@app.get("/api/images/{job_id}/{image_id}/preview")
-async def image_preview(job_id: str, image_id: str) -> Response:
-    job = get_job_or_404(job_id)
-    if job.kind != "images":
-        raise HTTPException(status_code=404, detail="Image not found.")
-    if not re.fullmatch(r"[a-f0-9]{12}", image_id):
-        raise HTTPException(status_code=404, detail="Image not found.")
-    image = job.image_map.get(image_id)
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found.")
-
-    data, _, _ = await fetch_public_bytes(
-        image["url"],
-        max_bytes=MAX_PREVIEW_BYTES,
-        referer=job.url,
-        accept=IMAGE_ACCEPT,
-        timeout=25.0,
-    )
-    _, mime = inspect_image_bytes(data)
-    return Response(
-        content=data,
-        media_type=mime,
-        headers={
-            "Cache-Control": "private, max-age=900",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
-
-
-def _build_zip_sync(results: list[tuple[int, Path, str]], zip_path: Path) -> None:
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
-        used_names: set[str] = set()
-        for _, path, filename in sorted(results, key=lambda item: item[0]):
-            name = filename
-            stem = Path(name).stem
-            suffix = Path(name).suffix
-            counter = 2
-            while name.lower() in used_names:
-                name = f"{stem}-{counter}{suffix}"
-                counter += 1
-            used_names.add(name.lower())
-            archive.write(path, arcname=name)
-
-
-@app.post("/api/images/zip", dependencies=[Depends(rate_limit("images-zip", 5))])
-async def images_zip(payload: ImageZipRequest) -> dict[str, Any]:
-    source_job = get_job_or_404(payload.job_id)
-    if source_job.kind != "images":
-        raise HTTPException(status_code=400, detail="That job isn't an image selection.")
-    if source_job.state != "ready":
-        raise HTTPException(status_code=409, detail="This image selection has expired. Scan the page again.")
-
-    requested_ids = list(dict.fromkeys(payload.image_ids))
-    if len(requested_ids) > MAX_IMAGE_COUNT:
-        raise FriendlyError(f"Select up to {MAX_IMAGE_COUNT} images at a time.", 400, "too_many_images")
-
-    selected: list[dict[str, Any]] = []
-    for image_id in requested_ids:
-        image = source_job.image_map.get(image_id)
-        if not image:
-            raise FriendlyError("One or more selected images are no longer available. Scan the page again.", 409)
-        selected.append(image)
-
-    zip_job = job_store.create(kind="image_zip", url=source_job.url, state="processing")
-    job_store.update(
-        zip_job.id,
-        page_title=source_job.page_title,
-        zip_source_job=source_job.id,
-        progress={
-            "stage": "downloading_images",
-            "percent": 0.0,
-            "downloaded_bytes": 0,
-            "total_bytes": None,
-            "speed": None,
-            "eta": None,
-        },
-    )
-
-    temp_dir = DOWNLOADS_DIR / f".{zip_job.id}.parts"
-    zip_path = DOWNLOADS_DIR / f"{zip_job.id}.zip"
-    temp_dir.mkdir(parents=True, exist_ok=False)
-
-    semaphore = asyncio.Semaphore(6)
-    total_lock = asyncio.Lock()
-    total_bytes = 0
-
-    async def download_one(index: int, image: dict[str, Any]) -> tuple[int, Path, str] | None:
-        nonlocal total_bytes
-        async with semaphore:
-            try:
-                data, _, _ = await fetch_public_bytes(
-                    image["url"],
-                    max_bytes=MAX_IMAGE_DOWNLOAD_BYTES,
-                    referer=source_job.url,
-                    accept=IMAGE_ACCEPT,
-                    timeout=35.0,
-                )
-                extension, _ = inspect_image_bytes(data)
-                async with total_lock:
-                    if total_bytes + len(data) > MAX_ZIP_TOTAL_BYTES:
-                        logger.info("Skipping %s: ZIP size cap reached", image.get("url"))
-                        return None
-                    total_bytes += len(data)
-                source_name = image.get("filename") or "image"
-                stem = sanitize_filename(source_name, fallback=f"image-{index + 1}", max_length=80)
-                if stem.lower().endswith(extension.lower()):
-                    stem = stem[: -len(extension)]
-                destination = temp_dir / f"{uuid.uuid4().hex}{extension}"
-                await asyncio.to_thread(destination.write_bytes, data)
-                final_name = sanitize_filename(
-                    stem,
-                    fallback=f"image-{index + 1}",
-                    max_length=90,
-                    extension=extension,
-                )
-                return index, destination, final_name
-            except Exception as exc:
-                logger.info("Could not include image %s: %s", image.get("url"), exc)
-                return None
-
-    try:
-        results = await asyncio.gather(*[
-            download_one(index, image) for index, image in enumerate(selected)
-        ])
-        successful = [item for item in results if item is not None]
-        if not successful:
-            raise MediaFetchError("None of the selected images could be downloaded.", 502)
-
-        job_store.set_progress(
-            zip_job.id,
-            stage="packaging",
-            percent=98.0,
-            downloaded_bytes=total_bytes,
-            total_bytes=total_bytes,
-        )
-        await asyncio.to_thread(_build_zip_sync, successful, zip_path)
-        title = sanitize_filename(
-            Path(source_job.page_title or "images").stem,
-            fallback="images",
-            max_length=90,
-            extension=".zip",
-        )
-        file_size = zip_path.stat().st_size
-        job_store.complete(zip_job.id, file_path=zip_path, download_name=title)
-        return {
-            "job_id": zip_job.id,
-            "state": "complete",
-            "download_url": f"/api/download/{zip_job.id}",
-            "file_name": title,
-            "size_bytes": file_size,
-            "count": len(successful),
-            "skipped": len(selected) - len(successful),
-        }
-    except asyncio.CancelledError:
-        job_store.fail(zip_job.id, "The ZIP request was canceled.")
-        raise
-    except FriendlyError as exc:
-        job_store.fail(zip_job.id, exc.message)
-        raise
-    except Exception:
-        logger.exception("ZIP creation failed for job %s", zip_job.id)
-        message = "We couldn't build the ZIP. Please try again with fewer images."
-        job_store.fail(zip_job.id, message)
-        raise FriendlyError(message, 500, "zip_failed") from None
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        if zip_job.state != "complete":
-            with contextlib.suppress(OSError):
-                zip_path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------

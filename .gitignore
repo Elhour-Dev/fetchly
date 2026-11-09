@@ -25,3 +25,24 @@ desktop_app.py
 testfile.txt
 testdir/
 pytestdir/
+
+# More secrets / logs
+cookies*.txt
+*.cookies
+*.log
+nohup.out
+
+# Desktop wrapper
+desktop/node_modules/
+desktop/vendor/
+desktop/dist/
+
+# Android app
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+android/.kotlin/
+*.jks
+*.keystore
+keystore-info.txt

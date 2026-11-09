@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#080B14</color>
+    <color name="card">#101525</color>
+    <color name="border">#1F2638</color>
+    <color name="text">#F1F5F9</color>
+    <color name="muted">#94A3B8</color>
+    <color name="accent">#5B54EA</color>
+    <color name="tonal_bg">#1B1F3F</color>
+    <color name="tonal_text">#A5B4FC</color>
+    <color name="track">#1F2638</color>
+    <color name="err_bg">#2A0F18</color>
+    <color name="err_border">#5B1B2D</color>
+    <color name="err_text">#FDA4AF</color>
+    <color name="ok_bg">#0A2A22</color>
+    <color name="ok_border">#14532D</color>
+    <color name="ok_text">#6EE7B7</color>
+    <color name="tip_bg">#2B2108</color>
+    <color name="tip_border">#5C4510</color>
+    <color name="tip_text">#FCD34D</color>
+</resources>
