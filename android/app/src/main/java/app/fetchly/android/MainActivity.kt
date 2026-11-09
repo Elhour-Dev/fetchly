@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private lateinit var removeCookies: Button
     @Volatile private var ready = false
     @Volatile private var updating = false
+    private var pendingStart = false
     private val urlRegex = Regex("https?://\\S+")
 
     private val d by lazy { resources.displayMetrics.density }
@@ -109,8 +110,9 @@ class MainActivity : Activity() {
         errText = label("", 15f, color = 0xFF991B1B.toInt())
         errBox.addView(errText)
         fixBtn = button("How to fix", false) { openHelp(State.helpTopic) }
-        errBox.addView(row(fixBtn, button("Copy error details", false) { copyErrorDetails() }),
-            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        errBox.addView(fixBtn, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        errBox.addView(button("Copy error details", false) { copyErrorDetails() },
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
         box.addView(errBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 
         box.addView(View(this).apply { setBackgroundColor(0xFFE2E8F0.toInt()) },
@@ -141,7 +143,10 @@ class MainActivity : Activity() {
             try {
                 Tools.init(this)
                 ready = true
-                runOnUiThread { version.text = "Tools: yt-dlp " + Tools.version(this); render() }
+                runOnUiThread { version.text = "Tools: yt-dlp " + Tools.version(this)
+                    State.text = ""
+                    if (pendingStart) { pendingStart = false; startDownload() } else render()
+                }
             } catch (e: Exception) {
                 runOnUiThread { version.text = "Tools could not start: " + (e.message ?: e.toString()) }
             }
@@ -179,7 +184,11 @@ class MainActivity : Activity() {
         val link = urlRegex.find(url.text.toString())?.value
         if (link == null) { status.text = "Please paste a link that starts with http:// or https://"; return }
         if (State.phase == State.Phase.RUNNING) return
-        if (!ready) { status.text = "Tools are still starting. Try again in a moment."; return }
+        if (!ready) {
+            pendingStart = true
+            State.text = "Getting ready… the download will start by itself."
+            render(); return
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 10)
