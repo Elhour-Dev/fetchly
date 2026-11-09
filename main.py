@@ -158,9 +158,10 @@ if GALLERY_DL_AVAILABLE:
 class FriendlyError(Exception):
     """An expected error whose message is safe to show to the user."""
 
-    def __init__(self, message: str, status_code: int = 400, code: str = "request_failed"):
+    def __init__(self, message: str, status_code: int = 400, code: str = "request_failed", detail: str = ""):
         super().__init__(message)
         self.message = message
+        self.detail = detail
         self.status_code = status_code
         self.code = code
 
@@ -280,8 +281,12 @@ def page_title_or_slug(title: str | None, url: str) -> str:
 
 
 LOGIN_HELP = (
-    "This site needs login. Sign in to it in your browser, then start Fetchly with "
-    "FETCHLY_COOKIES_BROWSER=chrome (or firefox, edge) and try again."
+    "This site needs a login. Log in to it in Firefox, then open Help > Cookies and press "
+    "\"Use Firefox cookies\". Then try again."
+)
+INSTAGRAM_LOGIN_HELP = (
+    "Instagram needs a login. Log in to Instagram in Firefox, then open Help > Cookies and "
+    "press \"Use Firefox cookies\". Then try again."
 )
 LOGIN_HELP_BOT = (
     "YouTube wants to confirm you're not a bot. Sign in to YouTube in your browser, "
@@ -1176,10 +1181,12 @@ def configure_gallery_dl() -> None:
         gallery_config.set(("extractor",), "user-agent", USER_AGENT)
         gallery_config.set(("extractor",), "sleep-request", 0.1)
         # Same login source as yt-dlp: cookies.txt first, else a browser.
-        if COOKIES_FILE.is_file():
-            gallery_config.set(("extractor",), "cookies", str(COOKIES_FILE))
-        elif COOKIES_BROWSER:
+        if COOKIES_BROWSER:
             gallery_config.set(("extractor",), "cookies", [COOKIES_BROWSER])
+        elif COOKIES_FILE.is_file():
+            gallery_config.set(("extractor",), "cookies", str(COOKIES_FILE))
+        else:
+            gallery_config.set(("extractor",), "cookies", None)
     except Exception:
         logger.debug("Could not tune gallery-dl configuration", exc_info=True)
 
@@ -1204,21 +1211,51 @@ def _extract_gallery_images_sync(url: str) -> dict[str, Any] | None:
         return None
 
     status = 0
+    gallery_log: list[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            gallery_log.append(record.getMessage())
+
+    capture = _Capture(level=logging.WARNING)
+    tool_logger = logging.getLogger(str(getattr(extractor, "category", "") or "gallery-dl"))
+    tool_logger.addHandler(capture)
     try:
         collector = _LimitedDataJob(extractor, file=None, resolve=True, max_items=MAX_IMAGE_COUNT)
         status = collector.run() or 0
     except Exception:
         logger.debug("gallery-dl extraction failed", exc_info=True)
         return None
+    finally:
+        tool_logger.removeHandler(capture)
+
+    # The real reason is often only in gallery-dl's log (for example Instagram
+    # redirecting to its login page). Do not hide it behind "No images found".
+    for entry in collector.data:
+        # gallery-dl stores extraction errors in its data as (-1, {"error", "message"}).
+        if entry and entry[0] == -1 and len(entry) > 1 and isinstance(entry[1], dict):
+            gallery_log.append(f"{entry[1].get('error')}: {entry[1].get('message')}")
+    log_text = _strip_ansi(" | ".join(gallery_log))[:1500]
+    if not collector.data_urls and log_text:
+        low_log = log_text.lower()
+        if any(word in low_log for word in ("login", "log in", "authentication", "sessionid", "csrftoken")):
+            is_instagram = getattr(extractor, "category", "") == "instagram"
+            raise FriendlyError(
+                INSTAGRAM_LOGIN_HELP if is_instagram else LOGIN_HELP,
+                422,
+                "login_required",
+                detail=log_text,
+            )
 
     # gallery-dl exit-style flags: 4 = HTTP error, 16 = login needed.
     if status & 16 and not collector.data_urls:
-        raise FriendlyError(LOGIN_HELP, 422, "login_required")
+        raise FriendlyError(LOGIN_HELP, 422, "login_required", detail=log_text)
     if status & 4 and not collector.data_urls:
         raise FriendlyError(
             "The site refused the request. It may need login or is limiting requests; try again later.",
             422,
             "site_refused",
+            detail=log_text,
         )
 
     title = ""
@@ -1464,10 +1501,11 @@ def _cookie_options() -> dict[str, str]:
     except OSError:
         has_cookies = False
 
-    if has_cookies:
-        return {"cookiefile": str(COOKIES_FILE)}
+    # A browser you picked wins over cookies.txt.
     if COOKIES_BROWSER:
         return {"cookiesfrombrowser": (COOKIES_BROWSER,)}
+    if has_cookies:
+        return {"cookiefile": str(COOKIES_FILE)}
 
     with _cookie_warning_lock:
         if not _cookie_warning_emitted:
@@ -1853,7 +1891,7 @@ class ImageZipRequest(BaseModel):
 async def friendly_error_handler(_: Request, exc: FriendlyError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.code, "message": exc.message},
+        content={"error": exc.code, "message": exc.message, "detail": exc.detail},
     )
 
 
@@ -1957,6 +1995,78 @@ async def health() -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Routes: login cookies (local use only; cookies are never logged or committed)
+# ---------------------------------------------------------------------------
+
+_COOKIE_BROWSERS = {"firefox", "chrome", "edge", "brave", "opera", "chromium", "vivaldi", "safari", "whale"}
+
+
+def _require_local(request: Request) -> None:
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        raise FriendlyError("Cookie settings can only be changed from the computer running Fetchly.", 403, "local_only")
+
+
+class CookieBrowserRequest(BaseModel):
+    browser: str = Field(min_length=1, max_length=20)
+
+
+class CookieFileRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=1_000_000)
+
+
+@app.get("/api/cookies")
+async def cookies_status(request: Request) -> dict[str, Any]:
+    _require_local(request)
+    return {"browser": COOKIES_BROWSER, "file": COOKIES_FILE.is_file()}
+
+
+@app.post("/api/cookies/browser")
+async def cookies_use_browser(payload: CookieBrowserRequest, request: Request) -> dict[str, Any]:
+    global COOKIES_BROWSER
+    _require_local(request)
+    name = payload.browser.strip().lower()
+    if name not in _COOKIE_BROWSERS:
+        raise FriendlyError("Pick a browser from the list.", 400, "bad_browser")
+    COOKIES_BROWSER = name
+    configure_gallery_dl()
+    return {"browser": COOKIES_BROWSER, "file": COOKIES_FILE.is_file()}
+
+
+@app.post("/api/cookies/file")
+async def cookies_upload_file(payload: CookieFileRequest, request: Request) -> dict[str, Any]:
+    _require_local(request)
+    text = payload.text.replace("\r\n", "\n")
+    rows = [ln for ln in text.split("\n") if ln.strip() and (not ln.startswith("#") or ln.startswith("#HttpOnly_"))]
+    if not rows or not all(len(ln.split("\t")) == 7 for ln in rows):
+        raise FriendlyError(
+            "That does not look like a cookies.txt file (Netscape format). Export it again from your browser.",
+            400,
+            "bad_cookies_file",
+        )
+    COOKIES_FILE.write_text(text.rstrip("\n") + "\n", encoding="utf-8")
+    try:
+        os.chmod(COOKIES_FILE, 0o600)
+    except OSError:
+        pass
+    configure_gallery_dl()
+    return {"browser": COOKIES_BROWSER, "file": True}
+
+
+@app.delete("/api/cookies")
+async def cookies_clear(request: Request) -> dict[str, Any]:
+    global COOKIES_BROWSER
+    _require_local(request)
+    COOKIES_BROWSER = ""
+    try:
+        COOKIES_FILE.unlink()
+    except FileNotFoundError:
+        pass
+    configure_gallery_dl()
+    return {"browser": "", "file": False}
+
+
 @app.post("/api/tools/update", dependencies=[Depends(rate_limit("tools-update", 3))])
 async def tools_update() -> dict[str, Any]:
     return await asyncio.to_thread(_update_tools_sync)
@@ -2008,7 +2118,9 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
         message = friendly_ytdlp_error(exc)
         job_store.fail(job.id, message)
         logger.info("Video info failed for %s: %s", url, message)
-        raise FriendlyError(message, 422, "video_info_failed") from None
+        raise FriendlyError(
+            message, 422, "video_info_failed", detail=_strip_ansi(str(exc)).strip()[:1500]
+        ) from None
 
 
 @app.post("/api/video/download", dependencies=[Depends(rate_limit("video-download", 6))])

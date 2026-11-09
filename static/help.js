@@ -23,12 +23,14 @@
     {
       id: 'login', title: 'Instagram and other sites that need a login',
       match: /log ?in|sign ?in|login required|authenticat|cookies|rate-limit|empty media response|requires an account|members?[- ]only|need to log/i,
-      see: 'A message like "login required", "empty media response" or "please log in".',
+      see: 'A message like "Instagram needs a login", "login required", "empty media response" or "No images were found" for an Instagram link.',
       why: 'The site only shows this content to signed-in users.',
       fix: [
         'Log in to the site in Firefox.',
-        'Give your browser cookies to yt-dlp (start Fetchly with FETCHLY_COOKIES_BROWSER=firefox), or save an exported cookies.txt file in the Fetchly folder. See the YouTube bot topic for the steps.',
-        'Try the link again.'
+        'Open Help and find the "Cookies" box (below the topics). Pick Firefox and press "Use browser cookies".',
+        'Or export a cookies.txt file from your browser and press "Upload cookies.txt" in the same box.',
+        'Try the link again. For Instagram, the post must open in Firefox while you are logged in.',
+        'Chrome on Windows often fails to give cookies. Firefox usually works.'
       ],
       warn: 'Warning: automated use of your main account can get it blocked. Use a spare account.'
     },
@@ -180,6 +182,7 @@
       if (t.warn) d.appendChild(el('p', { 'class': 'fhWarn', text: t.warn }));
       box.appendChild(d);
     });
+    box.appendChild(buildCookies());
     var row = el('div', { 'class': 'fhRow' });
     var copy = el('button', { type: 'button', 'class': 'fhBtn', text: 'Copy error details' });
     copy.addEventListener('click', function () { copyDetails(copy); });
@@ -191,6 +194,69 @@
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeHelp(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeHelp(); });
     document.body.appendChild(overlay);
+  }
+
+  // ---- Cookies box: use browser cookies or upload cookies.txt (local use only) ----
+  function api(method, path, body) {
+    return fetch(path, {
+      method: method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.message || 'Request failed');
+        return j;
+      });
+    });
+  }
+
+  function buildCookies() {
+    var wrap = el('details', { id: 'help-cookies' });
+    wrap.appendChild(el('summary', null, [el('h3', { text: 'Cookies (login for Instagram and other sites)' })]));
+    wrap.appendChild(el('p', { text: 'Log in to the site in your browser first. Cookies stay on this computer, in cookies.txt, and are never committed to git. Use a spare account if you can.' }));
+    var status = el('p', { 'class': 'fhStatus', role: 'status' });
+    var sel = el('select', { 'aria-label': 'Browser', 'class': 'fhBtn' });
+    ['firefox', 'chrome', 'edge', 'brave', 'opera', 'chromium', 'vivaldi'].forEach(function (b) {
+      sel.appendChild(el('option', { value: b, text: b === 'firefox' ? 'Firefox (best)' : b.charAt(0).toUpperCase() + b.slice(1) }));
+    });
+    var useBtn = el('button', { type: 'button', 'class': 'fhBtn', text: 'Use browser cookies' });
+    var file = el('input', { type: 'file', accept: '.txt,text/plain', 'aria-label': 'cookies.txt file' });
+    var upBtn = el('button', { type: 'button', 'class': 'fhBtn', text: 'Upload cookies.txt' });
+    var clrBtn = el('button', { type: 'button', 'class': 'fhBtn', text: 'Remove cookies' });
+    function show(j) {
+      var parts = [];
+      if (j.file) parts.push('cookies.txt is in use');
+      if (j.browser) parts.push('browser cookies: ' + j.browser);
+      status.textContent = 'Now: ' + (parts.length ? parts.join(', ') : 'no cookies');
+    }
+    function fail(e) { status.textContent = 'Error: ' + e.message; }
+    useBtn.addEventListener('click', function () { api('POST', '/api/cookies/browser', { browser: sel.value }).then(show, fail); });
+    clrBtn.addEventListener('click', function () { api('DELETE', '/api/cookies').then(show, fail); });
+    upBtn.addEventListener('click', function () {
+      var f = file.files && file.files[0];
+      if (!f) { status.textContent = 'Choose a cookies.txt file first.'; return; }
+      f.text().then(function (t) { return api('POST', '/api/cookies/file', { text: t }); }).then(function (j) { file.value = ''; show(j); }, fail);
+    });
+    wrap.addEventListener('toggle', function () { if (wrap.open) api('GET', '/api/cookies').then(show, fail); });
+    wrap.appendChild(el('div', { 'class': 'fhRow' }, [sel, useBtn]));
+    wrap.appendChild(el('div', { 'class': 'fhRow' }, [file, upBtn]));
+    wrap.appendChild(el('div', { 'class': 'fhRow' }, [clrBtn]));
+    wrap.appendChild(status);
+    return wrap;
+  }
+
+  // Remember the technical detail the server sends with an error, for "Copy error details".
+  var lastDetail = '';
+  if (window.fetch) {
+    var origFetch = window.fetch;
+    window.fetch = function () {
+      return origFetch.apply(this, arguments).then(function (resp) {
+        if (!resp.ok) {
+          resp.clone().json().then(function (j) { lastDetail = (j && j.detail) ? String(j.detail) : ''; }).catch(function () {});
+        }
+        return resp;
+      });
+    };
   }
 
   function openHelp(topicId) {
@@ -210,6 +276,7 @@
       'Fetchly error details',
       'Time: ' + new Date().toISOString(),
       'Error: ' + (msg || lastError || '(none shown)'),
+      'Technical: ' + (lastDetail || '(none)'),
       'Tools: ' + (tv ? tv.textContent.trim() : '(unknown)'),
       'Browser: ' + navigator.userAgent
     ].join('\n');
