@@ -1,7 +1,10 @@
-// Electron wrapper for Fetchly: starts the bundled Python server and shows it in a window.
+// Electron wrapper for Fetchy: starts the bundled Python server and shows it in a window.
 const { app, BrowserWindow, dialog, shell } = require('electron');
 const { spawn, execFile } = require('child_process');
 const fs = require('fs'), path = require('path'), net = require('net'), http = require('http');
+
+// Keep the old data folder (login, settings) now that the app is named Fetchy.
+app.setPath('userData', path.join(app.getPath('appData'), 'Fetchly'));
 
 let server = null, win = null, logFile = null;
 
@@ -69,12 +72,12 @@ async function start() {
   });
   server.stdout.pipe(logFile, { end: false });
   server.stderr.pipe(logFile, { end: false });
-  server.on('exit', code => { if (server) { dialog.showErrorBox('Fetchly', `The engine stopped (code ${code}). See server.log in ${data}`); app.quit(); } });
+  server.on('exit', code => { if (server) { dialog.showErrorBox('Fetchy', `The engine stopped (code ${code}). See server.log in ${data}`); app.quit(); } });
   await waitForServer(port);
 
   win = new BrowserWindow({
-    width: 1100, height: 800, title: 'Fetchly', autoHideMenuBar: true,
-    icon: path.join(__dirname, 'assets', 'icon.png'),
+    width: 1100, height: 800, title: 'Fetchy', autoHideMenuBar: true,
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
   });
   win.setMenuBarVisibility(false);
   const origin = `http://127.0.0.1:${port}`;
@@ -90,7 +93,7 @@ async function start() {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-  app.whenReady().then(() => start().catch(e => { dialog.showErrorBox('Fetchly', String(e.message || e)); killServer(); app.quit(); }));
+  app.whenReady().then(() => start().catch(e => { dialog.showErrorBox('Fetchy', String(e.message || e)); killServer(); app.quit(); }));
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', killServer);
 }

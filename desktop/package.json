@@ -1,13 +1,12 @@
 {
   "name": "fetchly-desktop",
-  "productName": "Fetchly",
+  "productName": "Fetchy",
   "version": "1.0.0",
-  "description": "Fetchly - download videos and images",
-  "author": "Fetchly",
+  "description": "Fetchy - download videos and images",
+  "author": "Fetchy",
   "main": "main.js",
   "scripts": {
     "prepare-vendor": "node scripts/prepare.js",
-    "icon": "node scripts/make-icon.js",
     "start": "electron .",
     "dist": "node scripts/prepare.js && electron-builder --win nsis"
   },
@@ -17,9 +16,9 @@
   },
   "build": {
     "appId": "app.fetchly.desktop",
-    "productName": "Fetchly",
+    "productName": "Fetchy",
     "directories": { "output": "dist" },
-    "files": ["main.js", "package.json"],
+    "files": ["main.js", "package.json", "assets/icon.ico"],
     "extraResources": [
       { "from": "../main.py", "to": "app/main.py" },
       { "from": "../THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
@@ -29,7 +28,7 @@
       { "from": "vendor/pylib", "to": "pylib" },
       { "from": "vendor/ffmpeg", "to": "ffmpeg" }
     ],
-    "win": { "target": "nsis", "icon": "assets/icon.png", "artifactName": "Fetchly-Setup-${version}.exe" },
+    "win": { "target": "nsis", "icon": "assets/icon.ico", "artifactName": "Fetchy-Setup-${version}.exe" },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
