@@ -1,5 +1,6 @@
 // Electron wrapper for Fetchy: starts the bundled Python server and shows it in a window.
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, shell, net: electronNet } = require('electron');
+const { checkForUpdate } = require('./update');
 const { spawn, execFile } = require('child_process');
 const fs = require('fs'), path = require('path'), net = require('net'), http = require('http');
 
@@ -88,6 +89,7 @@ async function start() {
     item.setSavePath(uniquePath(app.getPath('downloads'), item.getFilename()));
   });
   win.loadURL(origin);
+  checkForUpdate({ dialog, shell, net: electronNet, win, version: app.getVersion(), dataDir: data });
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();

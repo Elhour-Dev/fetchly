@@ -18,7 +18,7 @@
     "appId": "app.fetchly.desktop",
     "productName": "Fetchy",
     "directories": { "output": "dist" },
-    "files": ["main.js", "package.json", "assets/icon.ico"],
+    "files": ["main.js", "update.js", "package.json", "assets/icon.ico"],
     "extraResources": [
       { "from": "../main.py", "to": "app/main.py" },
       { "from": "../THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
