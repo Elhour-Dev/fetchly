@@ -54,7 +54,9 @@ class DownloadService : Service() {
         State.phase = State.Phase.RUNNING
         State.percent = 0
         State.failedUrl = url
-        State.text = "Getting ready…"
+        State.stage = State.Stage.FETCH
+        State.failedStage = null
+        State.text = "Fetching video info…"
         State.changed()
         val format = intent.getStringExtra(EXTRA_FORMAT) ?: Quality.BEST
         val audio = intent.getBooleanExtra(EXTRA_AUDIO, false)
@@ -79,14 +81,24 @@ class DownloadService : Service() {
                 if (c.exists()) addOption("--cookies", c.absolutePath)
             }
             var last = -1
-            YoutubeDL.getInstance().execute(req, PID) { p, _, _ ->
-                val pct = if (p < 0) 0 else p.toInt().coerceIn(0, 100)
-                if (pct != last) {
-                    last = pct
-                    State.percent = pct
-                    State.text = "Downloading… $pct%"
-                    State.changed()
-                    notify(notif("Downloading… $pct%", pct, false))
+            YoutubeDL.getInstance().execute(req, PID) { p, _, line ->
+                val l = line ?: ""
+                if (l.contains("[Merger]") || l.contains("[ExtractAudio]") || l.contains("[VideoRemuxer]") || l.contains("[ffmpeg]")) {
+                    if (State.stage != State.Stage.FINISH) {
+                        State.stage = State.Stage.FINISH; State.percent = 100
+                        State.text = "Finishing up…"; State.changed()
+                        notify(notif("Finishing up…", 0, true))
+                    }
+                } else if (State.stage != State.Stage.FINISH && p >= 0) {
+                    val pct = p.toInt().coerceIn(0, 100)
+                    if (State.stage != State.Stage.DOWNLOAD || pct != last) {
+                        last = pct
+                        State.stage = State.Stage.DOWNLOAD   // the real download has started
+                        State.percent = pct
+                        State.text = "Downloading… $pct%"
+                        State.changed()
+                        notify(notif("Downloading… $pct%", pct, false))
+                    }
                 }
             }
             if (cancelled) throw IllegalStateException("Cancelled")
@@ -94,7 +106,8 @@ class DownloadService : Service() {
                 ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") }
                 ?.maxByOrNull { it.length() }
                 ?: throw IllegalStateException("No video file was made (no video found at this link).")
-            State.text = "Saving to Downloads…"; State.percent = 100; State.changed()
+            State.stage = State.Stage.FINISH
+            State.text = "Finishing up…"; State.percent = 100; State.changed()
             val name = saveToDownloads(file)
             State.phase = State.Phase.DONE
             State.text = "Done. Saved in Downloads: $name"
@@ -107,6 +120,7 @@ class DownloadService : Service() {
                 val raw = (e.message ?: e.toString()).trim()
                 val topic = Help.find(raw, url)
                 State.phase = State.Phase.ERROR
+                State.failedStage = State.stage
                 State.helpTopic = topic?.id
                 State.needsLogin = topic?.login == true
                 State.errorShort = topic?.simple?.ifEmpty { null } ?: "The download did not work."

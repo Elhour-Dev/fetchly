@@ -11,7 +11,12 @@ import com.yausername.youtubedl_android.YoutubeDLRequest
 object State {
     enum class Phase { IDLE, RUNNING, DONE, ERROR }
 
+    /** Steps of one download, same idea as the desktop app. */
+    enum class Stage(val failedAt: String) { FETCH("fetching video info"), DOWNLOAD("downloading"), FINISH("finishing (merging video and audio)") }
+
     @Volatile var phase = Phase.IDLE
+    @Volatile var stage = Stage.FETCH
+    @Volatile var failedStage: Stage? = null
     @Volatile var percent = 0
     @Volatile var text = ""
     @Volatile var errorShort = ""
@@ -143,9 +148,10 @@ object Cookies {
         f.writeText((listOf(HEADER) + old + fresh).joinToString("\n") + "\n")
     }
 
-    /** Netscape lines for the cookies a WebView holds for these hosts. */
+    /** Netscape lines for the cookies a WebView holds for these hosts. Flushes the WebView store first. */
     fun fromWebView(hosts: Set<String>, base: String): List<String> {
         val cm = android.webkit.CookieManager.getInstance()
+        cm.flush()
         val seen = HashSet<String>()
         val out = ArrayList<String>()
         val expiry = System.currentTimeMillis() / 1000 + 180L * 24 * 3600
@@ -153,13 +159,41 @@ object Cookies {
             val raw = cm.getCookie("https://$h") ?: continue
             for (part in raw.split(';')) {
                 val name = part.substringBefore('=').trim()
-                val value = part.substringAfter('=', "").trim()
+                val value = part.substringAfter('=', "").trim().replace(Regex("[\\t\\r\\n]"), "")
                 if (name.isEmpty() || !seen.add(name)) continue
                 out.add(".$base\tTRUE\t/\tTRUE\t$expiry\t$name\t$value")
             }
         }
         return out
     }
+
+    /** Cookie names that prove a login on well-known sites (all must be present). null = unknown site. */
+    fun sessionNames(base: String): Set<String>? = when (base) {
+        "instagram.com", "tiktok.com" -> setOf("sessionid")
+        "facebook.com" -> setOf("c_user", "xs")
+        "x.com", "twitter.com" -> setOf("auth_token")
+        "reddit.com" -> setOf("reddit_session")
+        else -> null
+    }
+
+    private fun nameOf(line: String) = line.split('\t').getOrNull(5) ?: ""
+    private fun valueOf(line: String) = line.split('\t').getOrNull(6) ?: ""
+
+    /** True when every session cookie is there with a non-empty value. Looks at names only. */
+    fun hasSession(lines: List<String>, base: String): Boolean {
+        val need = sessionNames(base) ?: return lines.isNotEmpty()
+        return need.all { n -> lines.any { nameOf(it) == n && valueOf(it).isNotEmpty() } }
+    }
+
+    /** Read the saved file back and check the session cookie is in it (for the given site). */
+    fun savedHasSession(ctx: Context, base: String): Boolean {
+        val f = Tools.cookiesFile(ctx)
+        if (!f.exists()) return false
+        return hasSession(f.readLines().filter { isData(it) && domainOf(it) == base }, base)
+    }
+
+    /** Cookie names only (never values), for logs. */
+    fun names(lines: List<String>) = lines.map { nameOf(it) }
 
     /** Copy a picked cookies.txt into private storage. Returns an error message, or null when it worked. */
     fun import(ctx: Context, uri: android.net.Uri): String? = try {
