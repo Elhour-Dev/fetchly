@@ -42,6 +42,15 @@ Fetchly is designed as a local, single-user utility. Paste a public video URL to
 Check the download with the SHA256 value in the release notes (`Get-FileHash Fetchly-Setup-1.0.0.exe`).
 License notices (ffmpeg is GPL v3, yt-dlp is Unlicense): see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+## Download for Android
+
+1. On your phone, open the [Android release](https://github.com/Elhour-Dev/fetchly/releases/tag/v1.0.0-android) and download `Fetchly-1.0.0.apk`.
+2. Open the file. Android will ask to allow installs from your browser or Files app. Allow it for this install.
+3. Share a video link to Fetchly, or paste it in the app. Videos save to your Downloads folder.
+4. Login problems? The app shows a **Log in** button. If the site blocks that, use **Import cookies.txt**. Open **Help** in the app for steps.
+
+Check the download with the SHA256 value in the release notes. Needs Android 10 or newer and a 64-bit (arm64) phone.
+
 ## Requirements
 
 - **Python 3.10+**
