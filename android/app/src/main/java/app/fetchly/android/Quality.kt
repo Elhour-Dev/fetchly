@@ -37,6 +37,7 @@ object Quality {
     /** Ask yt-dlp for the formats. Throws when it cannot. Call on a background thread; [pid] lets the caller cancel it. */
     fun fetch(ctx: Context, link: String, pid: String): List<QOption> {
         Tools.init(ctx)
+        infoFile(ctx).delete()
         val req = YoutubeDLRequest(link).apply {
             addOption("--no-playlist")
             addOption("-J")
@@ -44,8 +45,15 @@ object Quality {
             if (c.exists()) addOption("--cookies", c.absolutePath)
         }
         val out = YoutubeDL.getInstance().execute(req, pid) { _, _, _ -> }.out
-        return options(JSONObject(out.substring(out.indexOf('{'))))
+        val json = out.substring(out.indexOf('{'))
+        val info = JSONObject(json)
+        // Keep the answer so the download does not ask the site again (a second request is often refused, e.g. TikTok 403).
+        if (info.optString("_type", "video") == "video") try { infoFile(ctx).writeText(json) } catch (_: Exception) {}
+        return options(info)
     }
+
+    /** The saved answer of the last [fetch] (may not exist). */
+    fun infoFile(ctx: Context) = java.io.File(ctx.cacheDir, "info.json")
 
     private fun options(info: JSONObject): List<QOption> {
         val duration = info.num("duration")

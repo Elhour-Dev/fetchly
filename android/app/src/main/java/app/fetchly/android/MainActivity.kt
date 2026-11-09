@@ -211,7 +211,8 @@ class MainActivity : Activity() {
         else Toast.makeText(this, if (failed) "Could not load the qualities. Downloading the best quality."
             else "Downloading the best quality.", Toast.LENGTH_LONG).show()
         startForegroundService(Intent(this, DownloadService::class.java).putExtra(DownloadService.EXTRA_URL, link)
-            .putExtra(DownloadService.EXTRA_FORMAT, opt?.format).putExtra(DownloadService.EXTRA_AUDIO, opt?.audio == true))
+            .putExtra(DownloadService.EXTRA_FORMAT, opt?.format).putExtra(DownloadService.EXTRA_AUDIO, opt?.audio == true)
+            .putExtra(DownloadService.EXTRA_USE_INFO, opt != null))
         render()
     }
 
@@ -316,12 +317,20 @@ class MainActivity : Activity() {
                 tint(R.color.err_bg, R.color.err_border, R.color.err_text, R.color.err_text)
                 if (retryMode) { sTitle.text = "Cookies saved"; sSub.text = "Tap Retry to download again." }
                 else {
-                    sTitle.text = State.errorShort
+                    val fresh = State.helpTopic == "g_update" && Tools.recentlyUpdated(this)
+                    sTitle.text = if (fresh) "This site cannot be read right now." else State.errorShort
                     val at = State.failedStage?.let { "Failed while ${it.failedAt}." } ?: ""
                     val base = Cookies.baseDomain(Cookies.hostOf(State.failedUrl))
                     val loggedIn = Cookies.sessionNames(base) != null && Cookies.savedHasSession(this, base)
-                    sSub.text = (if (login && loggedIn) "Fetchly has your $base login, but the site still asked for one. " +
-                        "The login may have expired, or this account cannot see this link. Log in again, or import a fresh cookies.txt. "
+                    sSub.text = (if (fresh) "The tools are already up to date. The site changed and the downloader cannot read this link yet. " +
+                        "Try again in a few days, after the next yt-dlp update. "
+                    else if (login && loggedIn) when (State.sessionCode) {
+                        200 -> "Instagram accepts your login, but gave no video for this link. The story may be gone, or this account cannot see it. "
+                        401, 403 -> "Instagram no longer accepts the saved login. Tap \"Log in\" to sign in again. "
+                        429 -> "Instagram is limiting this network right now. Turn off VPN or switch network, wait a few minutes, then tap Retry. "
+                        else -> "Fetchly has your $base login, but the site still asked for one. " +
+                            "The login may have expired, or this account cannot see this link. Log in again, or import a fresh cookies.txt. "
+                    }
                     else if (login) "Tap \"Log in\" and sign in; " +
                         "Fetchly closes the page and retries by itself. If the site does not allow it, tap \"Import cookies.txt\". " else "") + at
                 }
@@ -355,6 +364,7 @@ class MainActivity : Activity() {
             appendLine("Cookies saved: " + Tools.cookiesFile(this@MainActivity).exists())
             val base = Cookies.baseDomain(Cookies.hostOf(State.failedUrl))
             if (Cookies.sessionNames(base) != null) appendLine("Login cookie for $base in file: " + Cookies.savedHasSession(this@MainActivity, base))
+            if (State.sessionCode != 0) appendLine("Instagram login check: HTTP " + State.sessionCode)
             appendLine("Link: $link")
             appendLine("Failed while: " + (State.failedStage?.failedAt ?: "unknown"))
             appendLine("Error:")

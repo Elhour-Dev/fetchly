@@ -22,6 +22,7 @@ class DownloadService : Service() {
         const val EXTRA_URL = "url"
         const val EXTRA_FORMAT = "format"   // yt-dlp format selector from the quality picker (null = Best)
         const val EXTRA_AUDIO = "audio"     // true = extract MP3
+        const val EXTRA_USE_INFO = "use_info" // true = reuse the video info saved by the quality picker
         const val ACTION_CANCEL = "cancel"
         private const val PID = "fetchly-download"
         private const val CHANNEL = "downloads"
@@ -60,16 +61,19 @@ class DownloadService : Service() {
         State.changed()
         val format = intent.getStringExtra(EXTRA_FORMAT) ?: Quality.BEST
         val audio = intent.getBooleanExtra(EXTRA_AUDIO, false)
-        thread { work(url, format, audio) }
+        val useInfo = intent.getBooleanExtra(EXTRA_USE_INFO, false)
+        thread { work(url, format, audio, useInfo) }
         return START_NOT_STICKY
     }
 
-    private fun work(url: String, format: String, audio: Boolean) {
+    private fun work(url: String, format: String, audio: Boolean, useInfo: Boolean) {
         val dir = File(cacheDir, "job")
         try {
             dir.deleteRecursively(); dir.mkdirs()
             Tools.init(this)
-            fun request(fmt: String, aud: Boolean) = YoutubeDLRequest(url).apply {
+            fun request(fmt: String, aud: Boolean, info: File? = null) =
+                (if (info != null) YoutubeDLRequest(emptyList()).apply { addOption("--load-info-json", info.absolutePath) }
+                else YoutubeDLRequest(url)).apply {
                 addOption("--no-playlist")
                 addOption("-f", fmt)
                 if (aud) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
@@ -101,8 +105,20 @@ class DownloadService : Service() {
                     }
                 }
             }
+            // Use the answer saved by the quality picker, so the site is not asked twice. If that fails, ask normally.
+            val info = if (useInfo) Quality.infoFile(this).takeIf { it.exists() } else null
+            fun run(fmt: String, aud: Boolean) {
+                if (info != null) {
+                    try { YoutubeDL.getInstance().execute(request(fmt, aud, info), PID, progress); return }
+                    catch (e: Exception) {
+                        if (cancelled) throw e
+                        dir.deleteRecursively(); dir.mkdirs(); State.stage = State.Stage.FETCH; State.percent = 0; last = -1
+                    }
+                }
+                YoutubeDL.getInstance().execute(request(fmt, aud), PID, progress)
+            }
             try {
-                YoutubeDL.getInstance().execute(request(format, audio), PID, progress)
+                run(format, audio)
             } catch (e: Exception) {
                 // The chosen quality is not available for this video: use Best instead of failing.
                 val raw = e.message ?: ""
@@ -110,7 +126,7 @@ class DownloadService : Service() {
                 dir.deleteRecursively(); dir.mkdirs()
                 State.stage = State.Stage.FETCH; State.percent = 0; last = -1
                 State.text = "That quality is not available. Trying the best quality…"; State.changed()
-                YoutubeDL.getInstance().execute(request(Quality.BEST, false), PID, progress)
+                run(Quality.BEST, false)
             }
             if (cancelled) throw IllegalStateException("Cancelled")
             val file = dir.listFiles()
@@ -136,6 +152,10 @@ class DownloadService : Service() {
                 State.needsLogin = topic?.login == true
                 State.errorShort = topic?.simple?.ifEmpty { null } ?: "The download did not work."
                 State.errorDetails = raw
+                State.sessionCode = 0
+                val base = Cookies.baseDomain(Cookies.hostOf(url))
+                if (topic?.login == true && base == "instagram.com" && Cookies.savedHasSession(this, base))
+                    State.sessionCode = Cookies.checkInstagram(this)
                 State.text = ""
                 notifyDone("Download failed", State.errorShort)
             }
@@ -143,6 +163,7 @@ class DownloadService : Service() {
         } finally {
             working = false
             dir.deleteRecursively()
+            Quality.infoFile(this).delete()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }

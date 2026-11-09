@@ -24,6 +24,7 @@ object State {
     @Volatile var helpTopic: String? = null
     @Volatile var needsLogin = false
     @Volatile var failedUrl = ""
+    @Volatile var sessionCode = 0        // HTTP status of the Instagram login check after a failure (0 = not checked)
     @Volatile var cookiesSaved = false   // true after a login or import; the error card then offers "Retry"
     @Volatile var updateOffered = false  // the update pop-up was already shown for the current error
     @Volatile var startupChecked = false // the "tools are old" check runs once per app start
@@ -96,6 +97,8 @@ object Tools {
         val now = System.currentTimeMillis()
         return now < prefs(ctx).getLong("update_snooze_until", 0) || now - prefs(ctx).getLong("last_update", 0) < 3 * DAY
     }
+    /** True when yt-dlp was updated in the last 3 days, so a "please report this issue" error is the site's fault. */
+    fun recentlyUpdated(ctx: Context) = System.currentTimeMillis() - prefs(ctx).getLong("last_update", 0) < 3 * DAY
     fun snoozeUpdate(ctx: Context) { prefs(ctx).edit().putLong("update_snooze_until", System.currentTimeMillis() + DAY).apply() }
 
     /** True when the tools are more than 7 days old (never updated: counted from when the app was installed or updated). */
@@ -106,7 +109,8 @@ object Tools {
         } catch (_: Exception) { null } ?: 0L
         val installed = if (built > 0) 0L else
             try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime } catch (_: Exception) { System.currentTimeMillis() }
-        val last = maxOf(prefs(ctx).getLong("last_update", 0), built, installed)
+        // Once an update was run (even "already the newest"), count from that day: the newest release can itself be weeks old.
+        val last = prefs(ctx).getLong("last_update", 0).takeIf { it > 0 } ?: maxOf(built, installed)
         return System.currentTimeMillis() - last > WEEK
     }
 }
@@ -200,6 +204,24 @@ object Cookies {
         if (!f.exists()) return false
         return hasSession(f.readLines().filter { isData(it) && domainOf(it) == base }, base)
     }
+
+    /**
+     * Asks Instagram itself whether the saved login is accepted. Sends the cookies only to instagram.com
+     * (like yt-dlp does) and returns the HTTP status only. Call on a background thread. 0 = no answer.
+     */
+    fun checkInstagram(ctx: Context): Int = try {
+        val f = Tools.cookiesFile(ctx)
+        val header = f.readLines().filter { isData(it) && domainOf(it) == "instagram.com" }
+            .joinToString("; ") { nameOf(it) + "=" + valueOf(it) }
+        val c = java.net.URL("https://www.instagram.com/api/v1/accounts/current_user/?edit=true")
+            .openConnection() as java.net.HttpURLConnection
+        c.connectTimeout = 10000; c.readTimeout = 10000; c.instanceFollowRedirects = false
+        c.setRequestProperty("Cookie", header)
+        c.setRequestProperty("X-IG-App-ID", "936619743392459")
+        c.setRequestProperty("User-Agent", android.webkit.WebSettings.getDefaultUserAgent(ctx))   // same browser the login used
+        val code = c.responseCode
+        c.disconnect(); code
+    } catch (e: Exception) { 0 }
 
     /** Cookie names only (never values), for logs. */
     fun names(lines: List<String>) = lines.map { nameOf(it) }
