@@ -22,13 +22,14 @@
     "files": ["main.js", "package.json"],
     "extraResources": [
       { "from": "../main.py", "to": "app/main.py" },
+      { "from": "../THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
       { "from": "../templates", "to": "app/templates" },
       { "from": "../static", "to": "app/static" },
       { "from": "vendor/python", "to": "python" },
       { "from": "vendor/pylib", "to": "pylib" },
       { "from": "vendor/ffmpeg", "to": "ffmpeg" }
     ],
-    "win": { "target": "nsis", "icon": "assets/icon.png" },
+    "win": { "target": "nsis", "icon": "assets/icon.png", "artifactName": "Fetchly-Setup-${version}.exe" },
     "nsis": {
       "oneClick": true,
       "perMachine": false,

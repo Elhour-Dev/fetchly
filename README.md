@@ -32,6 +32,16 @@ Fetchly is designed as a local, single-user utility. Paste a public video URL to
 
 ---
 
+## Download for Windows
+
+1. Go to the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchly-Setup-1.0.0.exe`.
+2. Run it. No admin rights needed. yt-dlp and ffmpeg are already inside.
+3. Windows may show "Protected your PC". Click **More info**, then **Run anyway**.
+4. Videos save to your Downloads folder. Use **Update tools** to get the newest yt-dlp.
+
+Check the download with the SHA256 value in the release notes (`Get-FileHash Fetchly-Setup-1.0.0.exe`).
+License notices (ffmpeg is GPL v3, yt-dlp is Unlicense): see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Requirements
 
 - **Python 3.10+**
