@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 
 /** Shared state between the screen and the download service. Never holds cookie contents. */
 object State {
@@ -34,8 +35,13 @@ object Tools {
         ready = true
     }
 
-    fun version(ctx: Context): String =
-        try { YoutubeDL.version(ctx.applicationContext) ?: "unknown" } catch (e: Exception) { "unknown" }
+    fun version(ctx: Context): String {
+        try { YoutubeDL.version(ctx.applicationContext)?.let { return it } } catch (_: Exception) {}
+        return try {
+            YoutubeDL.getInstance().execute(YoutubeDLRequest(emptyList()).apply { addOption("--version") }).out.trim()
+                .ifEmpty { "unknown" }
+        } catch (e: Exception) { "unknown" }
+    }
 
     fun cookiesFile(ctx: Context) = java.io.File(ctx.filesDir, "cookies.txt")
 }

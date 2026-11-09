@@ -25,6 +25,7 @@ class DownloadService : Service() {
         private const val CHANNEL = "downloads"
         private const val NOTIF_ID = 1
         private const val DONE_ID = 2
+        @Volatile private var working = false
     }
 
     @Volatile private var cancelled = false
@@ -42,10 +43,11 @@ class DownloadService : Service() {
             return START_NOT_STICKY
         }
         val url = intent?.getStringExtra(EXTRA_URL)
-        if (url == null || State.phase == State.Phase.RUNNING) {
-            if (State.phase != State.Phase.RUNNING) stopSelf()
+        if (url == null || working) {
+            if (!working) stopSelf()
             return START_NOT_STICKY
         }
+        working = true
         cancelled = false
         State.phase = State.Phase.RUNNING
         State.percent = 0
@@ -107,6 +109,7 @@ class DownloadService : Service() {
             }
             State.changed()
         } finally {
+            working = false
             dir.deleteRecursively()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()

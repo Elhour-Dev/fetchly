@@ -3,3 +3,6 @@
 -dontwarn com.fasterxml.jackson.**
 -dontwarn org.apache.commons.compress.**
 -dontwarn org.tukaani.xz.**
+-keep class org.apache.commons.compress.** { *; }
+-keep class org.tukaani.** { *; }
+-keep class org.apache.commons.io.** { *; }
