@@ -40,6 +40,10 @@ from typing import Any
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
 import httpx
+# Desktop app: use the newest downloaded tools (yt-dlp, gallery-dl) if present.
+TOOLS_DIR = Path(os.environ["FETCHLY_TOOLS_DIR"]) if os.getenv("FETCHLY_TOOLS_DIR") else None
+if TOOLS_DIR and (TOOLS_DIR / "current").is_dir():
+    sys.path.insert(0, str(TOOLS_DIR / "current"))
 import yt_dlp
 from bs4 import BeautifulSoup
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -72,13 +76,15 @@ except Exception as exc:  # pragma: no cover - depends on optional install state
 APP_NAME = "Fetchly"
 APP_VERSION = "1.0.0"
 BASE_DIR = Path(__file__).resolve().parent
-DOWNLOADS_DIR = BASE_DIR / "downloads"
+# Desktop app (Electron wrapper): per-user data folder and updated tools.
+DATA_DIR = Path(os.getenv("FETCHLY_DATA_DIR") or BASE_DIR)
+DOWNLOADS_DIR = DATA_DIR / "downloads"
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
 # Optional Netscape-format cookie jar used to authenticate yt-dlp requests.
 # It is applied only when present; a missing file is a warning, never a crash.
-COOKIES_FILE = BASE_DIR / "cookies.txt"
+COOKIES_FILE = DATA_DIR / "cookies.txt"
 
 # Optional: read cookies straight from a browser on this computer (local use).
 # Example: FETCHLY_COOKIES_BROWSER=chrome  (also: firefox, edge, brave, opera...)
@@ -110,7 +116,7 @@ IMAGE_EXTRACT_TIMEOUT_SECONDS = _env_int("IMAGE_EXTRACT_TIMEOUT_SECONDS", 60, mi
 GALLERY_EXTRACT_TIMEOUT_SECONDS = _env_int("GALLERY_EXTRACT_TIMEOUT_SECONDS", 50, minimum=10)
 MAX_REDIRECTS = 5
 HOST = os.getenv("HOST", "127.0.0.1")
-PORT = _env_int("PORT", 8000, minimum=1)
+PORT = _env_int("PORT", 8001, minimum=1)
 
 # A normal browser UA avoids many naive bot blocks while still being honest in
 # the README that this is a local downloader and not a crawler.
@@ -1140,11 +1146,65 @@ def _reload_tools() -> None:
     configure_gallery_dl()
 
 
+def _update_tools_desktop(before: tuple[str | None, str | None]) -> dict[str, Any]:
+    """Desktop app: install new tools into the app data folder, keep a backup,
+    and go back to the old version if anything fails. No admin rights needed."""
+    assert TOOLS_DIR is not None
+    new, current, backup = TOOLS_DIR / "new", TOOLS_DIR / "current", TOOLS_DIR / "backup"
+    TOOLS_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(new, ignore_errors=True)
+    fail = FriendlyError("Couldn't update. No internet? Your old version still works.", 500, "update_failed")
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-U", "--disable-pip-version-check",
+             "--target", str(new), "yt-dlp", "gallery-dl"],
+            capture_output=True, text=True, timeout=300,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(new, ignore_errors=True)
+        raise FriendlyError("The update took too long. Check your internet and try again.", 504, "update_timeout") from None
+    if proc.returncode != 0:
+        logger.warning("Tool update failed: %s", proc.stderr[-500:])
+        shutil.rmtree(new, ignore_errors=True)
+        raise fail
+    # Swap: current -> backup, new -> current.
+    shutil.rmtree(backup, ignore_errors=True)
+    if current.exists():
+        current.rename(backup)
+    new.rename(current)
+    if str(current) not in sys.path:
+        sys.path.insert(0, str(current))
+    try:
+        _reload_tools()
+        ytdlp_version, gallery_version = _tool_versions()
+        if not ytdlp_version:
+            raise RuntimeError("yt-dlp did not load")
+    except Exception:
+        logger.warning("New tools failed to load; going back to the old version", exc_info=True)
+        shutil.rmtree(current, ignore_errors=True)
+        if backup.exists():
+            backup.rename(current)
+        else:
+            with contextlib.suppress(ValueError):
+                sys.path.remove(str(current))
+        with contextlib.suppress(Exception):
+            _reload_tools()
+        raise FriendlyError("The new version did not work, so the old one is back.", 500, "update_rolled_back") from None
+    if (ytdlp_version, gallery_version) == before:
+        message = f"Already up to date (yt-dlp {ytdlp_version}, gallery-dl {gallery_version})"
+    else:
+        message = f"Updated to version {ytdlp_version} (yt-dlp) and {gallery_version} (gallery-dl). Old version kept as backup."
+    return {"message": message, "yt_dlp": ytdlp_version, "gallery_dl": gallery_version}
+
+
 def _update_tools_sync() -> dict[str, Any]:
     if not _update_lock.acquire(blocking=False):
         raise FriendlyError("An update is already running. Please wait.", 409, "update_busy")
     try:
         before = _tool_versions()
+        if TOOLS_DIR:
+            return _update_tools_desktop(before)
         try:
             proc = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "-U", "--disable-pip-version-check",
