@@ -27,7 +27,6 @@ import sys
 import threading
 import time
 import unicodedata
-import zipfile
 import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -58,7 +57,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 APP_NAME = "Fetchy"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.2.0"   # keep equal to desktop/package.json and the git tag
 BASE_DIR = Path(__file__).resolve().parent
 # Desktop app (Electron wrapper): per-user data folder and updated tools.
 DATA_DIR = Path(os.getenv("FETCHLY_DATA_DIR") or BASE_DIR)
@@ -191,7 +190,7 @@ _WINDOWS_RESERVED_NAMES = {
     *(f"COM{i}" for i in range(1, 10)),
     *(f"LPT{i}" for i in range(1, 10)),
 }
-_INVALID_FILename_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_INVALID_FILENAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _SPACE_RE = re.compile(r"\s+")
 
 
@@ -209,7 +208,7 @@ def sanitize_filename(
     always chosen by the server, never trusted from a remote URL.
     """
     clean = unicodedata.normalize("NFKC", value or "")
-    clean = _INVALID_FILename_RE.sub(" ", clean)
+    clean = _INVALID_FILENAME_RE.sub(" ", clean)
     clean = _SPACE_RE.sub(" ", clean).strip(" .")
     if extension:
         ext = extension if extension.startswith(".") else f".{extension}"
@@ -272,7 +271,7 @@ def friendly_ytdlp_error(exc: Exception) -> str:
         (("live event",), "Live streams aren't supported. Wait until the stream has ended."),
         (("is live",), "Live streams aren't supported. Wait until the stream has ended."),
         (("http error 403",), "The site refused the download (HTTP 403). It may require cookies or a different link."),
-        (("http error 404",), "The site returned ”not found“ for this link (HTTP 404)."),
+        (("http error 404",), "The site returned \"not found\" for this link (HTTP 404)."),
         (("http error 429",), "The site is rate-limiting requests. Wait a minute and try again."),
         (("timed out",), "The site took too long to respond. Check the URL and try again."),
         (("playlist",), "Playlists aren't supported here. Paste a link to a single video."),
@@ -530,7 +529,7 @@ class JobStore:
                 if expiry <= now:
                     self._jobs.pop(job_id, None)
                     removed_jobs += 1
-            active_stems = {
+            active_ids = {
                 job.id for job in self._jobs.values()
                 if job.state not in TERMINAL_STATES
             }
@@ -541,20 +540,16 @@ class JobStore:
             for entry in DOWNLOADS_DIR.iterdir():
                 if entry.name == ".gitkeep":
                     continue
+                # Files of a running job ("<id>.f137.mp4.part", "<id>.mp4"...) are never removed.
+                if entry.name.split(".", 1)[0] in active_ids:
+                    continue
                 try:
-                    if entry.is_dir():
-                        # Temporary unzipping directories are named
-                        # ".<job-id>.parts"; keep ones owned by active jobs.
-                        active_dir = any(entry.name == f".{stem}.parts" for stem in active_stems)
-                        if entry.stat().st_mtime < cutoff and not active_dir:
-                            shutil.rmtree(entry, ignore_errors=True)
-                            removed_files += 1
-                        continue
                     if entry.stat().st_mtime >= cutoff:
                         continue
-                    if entry.stem in active_stems:
-                        continue
-                    entry.unlink(missing_ok=True)
+                    if entry.is_dir():
+                        shutil.rmtree(entry, ignore_errors=True)
+                    else:
+                        entry.unlink(missing_ok=True)
                     removed_files += 1
                 except OSError:
                     logger.debug("Could not clean up %s", entry, exc_info=True)
@@ -1092,33 +1087,6 @@ def extract_video_info_sync(url: str) -> dict[str, Any]:
     }
 
 
-def extract_playlist_info_sync(url: str) -> dict[str, Any]:
-    """Quick look at a playlist: title and number of videos (no per-video details)."""
-    options = _base_ydl_options()
-    options.update({"noplaylist": False, "extract_flat": "in_playlist", "skip_download": True})
-    with yt_dlp.YoutubeDL(options) as ydl:
-        info = ydl.extract_info(url, download=False)
-    entries = [e for e in (info.get("entries") or []) if e] if isinstance(info, dict) else []
-    if not entries:
-        raise FriendlyError("No videos were found in this playlist.", 422, "no_videos")
-    count = len(entries)
-    return {
-        "title": (str(info.get("title") or "Playlist").strip()[:260] + f" ({count} videos)"),
-        "duration": None,
-        "webpage_url": str(info.get("webpage_url") or url),
-        "uploader": str(info.get("uploader") or info.get("channel") or "")[:150],
-        "extractor": str(info.get("extractor_key") or "")[:80],
-        "thumbnail_url": None,
-        "is_playlist": True,
-        "formats": [
-            {"key": "best", "label": "Best quality", "detail": f"All {count} videos, saved as a ZIP",
-             "kind": "video", "size_bytes": None, "recommended": True},
-            {"key": "audio", "label": "Audio only", "detail": f"All {count} videos as MP3, saved as a ZIP",
-             "kind": "audio", "size_bytes": None, "recommended": False},
-        ],
-    }
-
-
 def _format_selector(quality: str) -> str:
     if quality in QUALITY_FORMAT_SELECTORS:
         return QUALITY_FORMAT_SELECTORS[quality]
@@ -1244,15 +1212,10 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
                 eta=None,
             )
 
-    is_playlist = bool(job.video.get("is_playlist"))
-    pl_dir = DOWNLOADS_DIR / f"{job_id}_pl"
     options = _base_ydl_options()
     options.update({
         "format": selector,
-        "outtmpl": str(pl_dir / "%(playlist_index)03d - %(title).80s.%(ext)s") if is_playlist
-        else str(DOWNLOADS_DIR / f"{job_id}.%(ext)s"),
-        "noplaylist": not is_playlist,
-        "ignoreerrors": is_playlist,
+        "outtmpl": str(DOWNLOADS_DIR / f"{job_id}.%(ext)s"),
         "merge_output_format": "mp4",
         "overwrites": True,
         "continuedl": False,
@@ -1271,10 +1234,7 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         },
     })
-    attempts = [] if is_playlist and quality not in AUDIO_KEYS else _extra_ydl_attempts(quality, subs, subs_auto)
-    if is_playlist and quality in AUDIO_KEYS:
-        attempts = attempts[-1:]   # playlists: plain audio extraction, no per-file cover art
-    attempts = attempts or [{}]
+    attempts = _extra_ydl_attempts(quality, subs, subs_auto)
 
     try:
         for number, extra in enumerate(attempts):
@@ -1289,21 +1249,6 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
                 logger.info("Video job %s: extras failed, retrying without them", job_id)
                 _cleanup_job_files(job_id)
                 job_store.set_progress(job_id, stage="starting", percent=0.0, speed=None, eta=None)
-
-        if is_playlist:
-            files = sorted(f for f in pl_dir.glob("*") if f.is_file() and not f.name.endswith((".part", ".ytdl", ".temp")))
-            if not files:
-                raise FriendlyError("No videos could be downloaded from this playlist.", 422, "no_videos")
-            job_store.set_progress(job_id, stage="processing", percent=100.0, speed=None, eta=None)
-            zip_path = DOWNLOADS_DIR / f"{job_id}.zip"
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as zf:
-                for f in files:
-                    zf.write(f, f.name)
-            shutil.rmtree(pl_dir, ignore_errors=True)
-            name = sanitize_filename(job.video.get("title") or "playlist", fallback="playlist", max_length=95, extension=".zip")
-            job_store.complete(job_id, file_path=zip_path, download_name=name)
-            logger.info("Playlist job %s complete (%s files)", job_id, len(files))
-            return
 
         final_file = _find_finished_file(job_id)
         if not final_file:
@@ -1327,13 +1272,11 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
         job_store.complete(job_id, file_path=final_file, download_name=download_name)
         logger.info("Video job %s complete (%s)", job_id, final_file.name)
     except FriendlyError as exc:
-        shutil.rmtree(pl_dir, ignore_errors=True)
         _cleanup_job_files(job_id)
         job_store.fail(job_id, exc.message)
         logger.warning("Video job %s failed: %s", job_id, exc.message)
     except Exception as exc:
         message = friendly_ytdlp_error(exc)
-        shutil.rmtree(pl_dir, ignore_errors=True)
         _cleanup_job_files(job_id)
         job_store.fail(job_id, message)
         logger.warning("Video job %s failed: %s", job_id, message)
@@ -1370,8 +1313,10 @@ async def lifespan(_: FastAPI):
 
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     _materialize_cookies_from_env()
-    if _cookie_options():
-        logger.info("Using yt-dlp cookies from %s", COOKIES_FILE)
+    cookie_opts = _cookie_options()
+    if cookie_opts:
+        source = f"the {COOKIES_BROWSER} browser" if "cookiesfrombrowser" in cookie_opts else str(COOKIES_FILE)
+        logger.info("Using yt-dlp cookies from %s", source)
     _http_client = httpx.AsyncClient(
         follow_redirects=False,
         timeout=httpx.Timeout(30.0, connect=10.0),
@@ -1452,7 +1397,6 @@ async def add_security_headers(request: Request, call_next):
 
 class UrlRequest(BaseModel):
     url: str = Field(min_length=1, max_length=4096)
-    playlist: bool = False
 
 
 class VideoDownloadRequest(BaseModel):
@@ -1539,7 +1483,7 @@ async def health() -> dict[str, Any]:
             "path": ffmpeg,
         },
         "yt_dlp": {
-            "version": getattr(getattr(yt_dlp, "version", None), "__version__", None),
+            "version": _tool_version(),
         },
         "limits": {
             "download_ttl_seconds": DOWNLOAD_TTL_SECONDS,
@@ -1554,9 +1498,23 @@ async def health() -> dict[str, Any]:
 _COOKIE_BROWSERS = {"firefox", "chrome", "edge", "brave", "opera", "chromium", "vivaldi", "safari", "whale"}
 
 
-def _require_local(request: Request) -> None:
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_local_request(request: Request) -> bool:
+    """True only for a direct request from this computer.
+
+    Behind a reverse proxy (the Docker deploy trusts X-Forwarded-For) the client
+    address can be faked, so any proxied request counts as remote.
+    """
+    if "x-forwarded-for" in request.headers or "forwarded" in request.headers:
+        return False
     host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1", "localhost"}:
+    return host in _LOCAL_HOSTS
+
+
+def _require_local(request: Request) -> None:
+    if not _is_local_request(request):
         raise FriendlyError("Cookie settings can only be changed from the computer running Fetchy.", 403, "local_only")
 
 
@@ -1634,7 +1592,7 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
 
     try:
         info = await asyncio.wait_for(
-            asyncio.to_thread(extract_playlist_info_sync if payload.playlist else extract_video_info_sync, url),
+            asyncio.to_thread(extract_video_info_sync, url),
             timeout=VIDEO_INFO_TIMEOUT_SECONDS,
         )
         video = {
@@ -1644,7 +1602,6 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
             "uploader": info["uploader"],
             "extractor": info["extractor"],
             "has_thumbnail": bool(info["thumbnail_url"]),
-            "is_playlist": bool(info.get("is_playlist")),
             "formats": info["formats"],
             "subtitles": info.get("subtitles", []),
         }
@@ -2011,8 +1968,10 @@ class PlaylistRun:
             "windowsfilenames": True,
             "extractor_args": {"youtube": {"player_client": ["android", "ios", "web_embedded", "tv_samsung", "web"]}},
         })
-        if self.quality == "audio":
-            options["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]
+        if self.quality in AUDIO_KEYS:
+            codec = AUDIO_KEYS[self.quality]
+            options["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": codec,
+                                          **({"preferredquality": "192"} if codec == "mp3" else {})}]
 
         outcome = "done"
         try:
@@ -2078,8 +2037,7 @@ class PlaylistActionRequest(BaseModel):
 
 
 def _playlist_or_404(request: Request, playlist_id: str | None = None) -> PlaylistRun | None:
-    host = request.client.host if request.client else ""
-    if not SAVE_DIR or host not in {"127.0.0.1", "::1", "localhost"}:
+    if not SAVE_DIR or not _is_local_request(request):
         raise FriendlyError("Playlist lists only work in the Fetchy desktop app.", 403, "desktop_only")
     if playlist_id is None:
         return None

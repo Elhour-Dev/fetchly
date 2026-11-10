@@ -1,0 +1,12 @@
+# Dev tool settings only (tests and lint). The app itself is run with main.py.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+line-length = 140
+extend-exclude = ["desktop", "android", "graphify-out"]
+
+[tool.ruff.lint]
+select = ["F", "E9", "B"]
