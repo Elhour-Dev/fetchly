@@ -121,14 +121,50 @@ def test_download_video_sync_completes(tmp_path, monkeypatch):
         def __exit__(self, *exc):
             return False
 
-        def download(self, urls):
+        def extract_info(self, url, download):
             Path(self.opts["outtmpl"].replace("%(ext)s", "mp4")).write_bytes(b"video")
+            return {"title": "Title from the download"}
 
     monkeypatch.setattr(engine.yt_dlp, "YoutubeDL", FakeYDL)
     video.download_video_sync(job.id, "best")
     done = jobs.job_store.get(job.id)
     assert done.state == "complete"
     assert done.download_name == "My video.mp4"
+
+    # Details were not read before the download (best-only fallback): the file is named after the download.
+    job = jobs.job_store.create(kind="video", url="https://example.com/v", state="downloading")
+    jobs.job_store.update(job.id, video={"title": "", "formats": list(formats.BEST_ONLY_FORMATS), "no_info": True})
+    video.download_video_sync(job.id, "best")
+    assert jobs.job_store.get(job.id).download_name == "Title from the download.mp4"
+
+
+def test_video_info_failure_offers_best_only(client, monkeypatch):
+    async def public(url):
+        return url
+
+    def boom(url):
+        raise RuntimeError("ERROR: [youtube] abc: Sign in to confirm you're not a bot")
+
+    monkeypatch.setattr("fetchy.web.routes_video.ensure_public_url", public)
+    monkeypatch.setattr("fetchy.web.routes_video.extract_video_info_sync", boom)
+    r = client.post("/api/video/info", json={"url": "https://www.youtube.com/watch?v=abc"})
+    assert r.status_code == 422
+    body = r.json()
+    assert body["error"] == "video_info_failed" and "not a bot" in body["message"]
+    job = jobs.job_store.get(body["job_id"])
+    assert job.state == "ready" and job.video["no_info"] is True
+    assert [f["key"] for f in job.video["formats"]] == ["best"]
+
+    started = {}
+    monkeypatch.setattr("fetchy.web.routes_video.download_video_sync", lambda *a: started.update(args=a))
+    assert client.post("/api/video/download", json={"job_id": job.id, "quality": "720"}).status_code == 400
+    r = client.post("/api/video/download", json={"job_id": job.id, "quality": "best"})
+    assert r.status_code == 200 and r.json()["state"] == "downloading"
+
+    # The whole-playlist ZIP has no best-only fallback.
+    monkeypatch.setattr("fetchy.web.routes_video.extract_playlist_info_sync", boom)
+    r = client.post("/api/video/info", json={"url": "https://www.youtube.com/playlist?list=1", "playlist": True})
+    assert r.status_code == 422 and "job_id" not in r.json()
 
 
 # --- Local-only checks ------------------------------------------------------
@@ -254,7 +290,7 @@ def test_zip_playlist_download(tmp_path, monkeypatch):
         def __exit__(self, *exc):
             return False
 
-        def download(self, urls):
+        def extract_info(self, url, download):
             for n in (1, 2):
                 path = Path(self.opts["outtmpl"].replace("%(playlist_index)03d", f"{n:03d}")
                             .replace("%(title).80s", f"v{n}").replace("%(ext)s", "mp4"))

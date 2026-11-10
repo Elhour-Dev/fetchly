@@ -1,7 +1,7 @@
 {
   "name": "fetchly-desktop",
   "productName": "Fetchy",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Fetchy - download videos and images",
   "author": "Fetchy",
   "main": "main.js",

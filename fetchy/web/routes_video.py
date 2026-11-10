@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from .. import config
 from ..config import AUDIO_KEYS, IMAGE_ACCEPT, IMAGE_EXTENSIONS, logger
 from ..errors import FriendlyError, friendly_ytdlp_error, strip_ansi
-from ..formats import format_selector
+from ..formats import BEST_ONLY_FORMATS, format_selector
 from ..http_fetch import fetch_public_bytes, inspect_image_bytes
 from ..jobs import TERMINAL_STATES, Job, job_store
 from ..playlist_zip import extract_playlist_info_sync
@@ -54,6 +54,21 @@ def get_job_or_404(job_id: str) -> Job:
     return job
 
 
+def _offer_best_only(job: Job, url: str) -> None:
+    """The video details could not be read. Keep the job so the user can still try a best-quality download
+    (the client gets the job_id with the error). The title comes from the download itself."""
+    job_store.update(
+        job.id,
+        state="ready",
+        video={
+            "title": "", "duration": None, "webpage_url": url, "uploader": "", "extractor": "",
+            "has_thumbnail": False, "is_playlist": False, "formats": list(BEST_ONLY_FORMATS), "subtitles": [],
+            "no_info": True,
+        },
+        expires_at=utc_now() + timedelta(seconds=config.DOWNLOAD_TTL_SECONDS),
+    )
+
+
 @router.post("/api/video/info", dependencies=[Depends(rate_limit("video-info", 12))])
 async def video_info(payload: UrlRequest) -> dict[str, Any]:
     url = await ensure_public_url(payload.url)
@@ -71,13 +86,21 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
         job_store.fail(job.id, message)
         raise FriendlyError(message, 504, "timeout") from None
     except FriendlyError as exc:
+        if exc.code == "no_formats" and not payload.playlist:
+            _offer_best_only(job, url)
+            raise FriendlyError(exc.message, exc.status_code, exc.code, detail=exc.detail, extra={"job_id": job.id}) from None
         job_store.fail(job.id, exc.message)
         raise
     except Exception as exc:
         message = friendly_ytdlp_error(exc)
-        job_store.fail(job.id, message)
         logger.info("Video info failed for %s: %s", url, message)
-        raise FriendlyError(message, 422, "video_info_failed", detail=strip_ansi(str(exc)).strip()[:1500]) from None
+        extra = {}
+        if not payload.playlist:
+            _offer_best_only(job, url)
+            extra = {"job_id": job.id}
+        else:
+            job_store.fail(job.id, message)
+        raise FriendlyError(message, 422, "video_info_failed", detail=strip_ansi(str(exc)).strip()[:1500], extra=extra) from None
 
     video = {
         "title": info["title"],

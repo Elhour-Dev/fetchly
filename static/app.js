@@ -18,12 +18,12 @@
     videoClear: $('videoClear'),
     videoHint: $('videoHint'),
     videoUrlError: $('videoUrlError'),
-    videoFetch: $('videoFetch'),
     videoEmpty: $('videoEmpty'),
     videoSkeleton: $('videoSkeleton'),
     videoErrorCard: $('videoErrorCard'),
     videoErrorText: $('videoErrorText'),
     videoRetry: $('videoRetry'),
+    videoErrorDownload: $('videoErrorDownload'),
     videoResult: $('videoResult'),
     videoThumb: $('videoThumb'),
     videoThumbFallback: $('videoThumbFallback'),
@@ -92,12 +92,14 @@
       pollToken: 0,
       terminal: false,
       autoDownloadedFor: null,
+      fetchTimer: null,     // pending auto-fetch after typing
+      lastFetched: null,    // the link the current result or error belongs to
     },
   };
 
   const INITIAL_BUTTON_LABELS = {
-    videoFetch: 'Fetch video',
     videoDownload: 'Download video',
+    videoErrorDownload: 'Download best quality',
   };
 
   // ---------------------------------------------------------------------
@@ -334,15 +336,43 @@
     errorEl.classList.add('hidden');
   }
 
-  function updateFetchButtons() {
-    els.videoFetch.disabled = state.video.phase === 'fetching' || !els.videoUrl.value.trim();
+  // There is no "Fetch" button: a pasted or typed link is fetched by itself after a short pause.
+  const FETCH_DELAY_MS = 600;
+
+  function requestFetch(force = false) {
+    clearTimeout(state.video.fetchTimer);
+    state.video.fetchTimer = null;
+    const value = normalizeUrlInput(els.videoUrl.value);
+    if (!value || validateUrl(value)) return;   // not a link yet: wait, the blur check explains if needed
+    if (!force && value === state.video.lastFetched && state.video.phase !== 'idle') return;
+    handleVideoSubmit({ preventDefault() {} });
+  }
+
+  function scheduleFetch() {
+    clearTimeout(state.video.fetchTimer);
+    state.video.fetchTimer = setTimeout(() => requestFetch(), FETCH_DELAY_MS);
+  }
+
+  // The link was cleared: stop a fetch in progress and go back to the start. A running download is left alone.
+  function resetVideo() {
+    clearTimeout(state.video.fetchTimer);
+    state.video.fetchTimer = null;
+    state.video.lastFetched = null;
+    if (['fetching', 'ready', 'error', 'playlist'].includes(state.video.phase)) {
+      if (state.video.controller) state.video.controller.abort();
+      state.video.requestSeq += 1;
+      state.video.jobId = null;
+      state.video.data = null;
+      setVideoPhase('idle');
+    }
   }
 
   function setupUrlField(input, pasteButton, clearButton, errorEl) {
     input.addEventListener('input', () => {
       clearFieldError(input, errorEl);
       refreshClearButton(input, clearButton);
-      updateFetchButtons();
+      if (input.value.trim()) scheduleFetch();
+      else resetVideo();
     });
     input.addEventListener('blur', () => {
       if (!input.value.trim()) {
@@ -358,7 +388,7 @@
       input.value = '';
       clearFieldError(input, errorEl);
       refreshClearButton(input, clearButton);
-      updateFetchButtons();
+      resetVideo();
       input.focus();
     });
     pasteButton.addEventListener('click', async () => {
@@ -374,8 +404,8 @@
         input.value = text;
         clearFieldError(input, errorEl);
         refreshClearButton(input, clearButton);
-        updateFetchButtons();
         input.focus();
+        requestFetch();
       } catch (_) {
         toast('Clipboard access was blocked. Use Ctrl/Cmd+V instead.', 'info');
         input.focus();
@@ -423,7 +453,6 @@
       els.videoProgress.hidden = phase !== 'downloading';
       els.videoComplete.hidden = phase !== 'complete';
     }
-    updateFetchButtons();
   }
 
   // ---------------------------------------------------------------------
@@ -705,7 +734,10 @@
 
   async function handleVideoSubmit(event) {
     event.preventDefault();
-    if (state.video.phase === 'fetching') return;
+    clearTimeout(state.video.fetchTimer);
+    state.video.fetchTimer = null;
+    // A new link while one is still being fetched: the older request is dropped below (requestSeq).
+    if (state.video.phase === 'fetching' && state.video.controller) state.video.controller.abort();
 
     const value = normalizeUrlInput(els.videoUrl.value);
     const validationMessage = validateUrl(value);
@@ -716,6 +748,7 @@
     }
     if (value !== els.videoUrl.value.trim()) els.videoUrl.value = value;
     clearFieldError(els.videoUrl, els.videoUrlError);
+    state.video.lastFetched = value;
 
     // Desktop app: playlist links open the playlist list instead (static/playlist.js).
     const playlists = state.health?.playlists && window.FetchyPlaylist;
@@ -735,8 +768,8 @@
     state.video.controller = controller;
 
     setVideoPhase('fetching');
-    setButtonLoading(els.videoFetch, true, 'Fetching…');
     setButtonLoading(els.videoDownload, false);
+    setButtonLoading(els.videoErrorDownload, false);
     els.videoLive.textContent = 'Fetching video details.';
 
     try {
@@ -756,37 +789,55 @@
       if (error.name === 'AbortError') {
         showVideoError('The request was canceled.');
       } else {
-        const message = error.message || 'We could not fetch that video.';
-        showVideoError(message);
-      }
-    } finally {
-      if (seq === state.video.requestSeq) {
-        setButtonLoading(els.videoFetch, false);
-        updateFetchButtons();
+        // The details could not be read, but the engine kept a job: offer a best-quality download anyway.
+        const jobId = error.data?.job_id || null;
+        if (jobId) {
+          state.video.jobId = jobId;
+          state.video.data = { title: '', webpage_url: value, formats: [{ key: 'best', label: 'Best quality', kind: 'video' }], no_info: true };
+        }
+        showVideoError(error.message || 'We could not fetch that video.', Boolean(jobId));
       }
     }
   }
 
-  function showVideoError(message) {
+  // canDownload: show the "Download best quality" button (the details failed, but a download may still work).
+  function showVideoError(message, canDownload = false) {
     closeVideoStream();
     setVideoPhase('error');
     els.videoErrorText.textContent = message;
+    els.videoErrorDownload.hidden = !canDownload;
     els.videoLive.textContent = `Video error: ${message}`;
     toast(message, 'error', 5200);
   }
 
+  // Shown while a best-quality download without video details runs.
+  function renderNoInfo(url) {
+    els.videoTitle.textContent = 'Best quality download';
+    els.videoUploader.textContent = '';
+    els.videoSource.textContent = shortenHost(url);
+    els.videoMetaDot.hidden = true;
+    els.videoDuration.hidden = true;
+    els.videoThumb.removeAttribute('src');
+    els.videoThumb.hidden = true;
+    els.videoThumbFallback.hidden = false;
+  }
+
   async function startVideoDownload() {
-    if (state.video.phase !== 'ready' || !state.video.jobId) return;
+    const noInfo = Boolean(state.video.data?.no_info);
+    const phaseOk = state.video.phase === 'ready' || (noInfo && state.video.phase === 'error');
+    if (!phaseOk || !state.video.jobId) return;
     const jobId = state.video.jobId;
-    const quality = els.videoQuality.value;
-    const subs = chosenSubtitles();
-    state.video.sent = { quality, subs, label: currentFormat()?.label || '' };
+    const quality = noInfo ? 'best' : els.videoQuality.value;
+    const subs = noInfo ? null : chosenSubtitles();
+    state.video.sent = { quality, subs, label: noInfo ? 'Best quality' : (currentFormat()?.label || '') };
     askNotifyPermission();
     state.video.terminal = false;
+    if (noInfo) renderNoInfo(state.video.data.webpage_url);
     setVideoPhase('downloading');
     updateVideoProgress({ stage: 'starting', percent: 0 });
     els.videoLive.textContent = 'Download started.';
     setButtonLoading(els.videoDownload, true, 'Starting…');
+    setButtonLoading(els.videoErrorDownload, true, 'Starting…');
 
     try {
       await api('/api/video/download', {
@@ -798,9 +849,10 @@
       openVideoStream(jobId);
     } catch (error) {
       if (state.video.jobId !== jobId) return;
-      setVideoPhase('ready');
+      setVideoPhase(noInfo ? 'error' : 'ready');
       setButtonLoading(els.videoDownload, false);
-      updateFormatHint();
+      setButtonLoading(els.videoErrorDownload, false);
+      if (!noInfo) updateFormatHint();
       toast(error.message || 'The download could not start.', 'error', 5200);
     }
   }
@@ -889,7 +941,7 @@
       const sent = state.video.sent || {};
       addHistory({
         id: state.video.jobId,
-        title: video.title,
+        title: video.title || name.replace(/\.[a-z0-9]{2,5}$/i, ''),   // no details were read: use the file name
         url: video.webpage_url || els.videoUrl.value.trim(),
         label: [sent.label, sent.subs ? `subtitles: ${sent.subs}` : ''].filter(Boolean).join(' + '),
       });
@@ -957,8 +1009,10 @@
     setInterval(syncPlaylist, 700);
 
     els.videoForm.addEventListener('submit', handleVideoSubmit);
-    els.videoRetry.addEventListener('click', () => els.videoForm.requestSubmit());
+    els.videoRetry.addEventListener('click', () => requestFetch(true));
+    els.videoPlaylist.addEventListener('change', () => requestFetch(true));
     els.videoDownload.addEventListener('click', startVideoDownload);
+    els.videoErrorDownload.addEventListener('click', startVideoDownload);
     els.videoQuality.addEventListener('change', updateFormatHint);
     els.subsCheck.addEventListener('change', () => pref.set('subs', els.subsCheck.checked ? '1' : '0'));
     els.subsLang.addEventListener('change', () => pref.set('sublang', els.subsLang.value));
@@ -972,7 +1026,6 @@
     els.updateTools.addEventListener('click', updateTools);
 
     setVideoPhase('idle');
-    updateFetchButtons();
     loadHealth();
   }
 
@@ -983,7 +1036,7 @@
     notifyDone('Playlist finished', `${title} — ${summary}`);
   }
 
-  window.Fetchy = { api, toast, formatBytes, formatDuration, setVideoPhase, setButtonLoading, fetchButton: els.videoFetch, playlistFinished };
+  window.Fetchy = { api, toast, formatBytes, formatDuration, setVideoPhase, setButtonLoading, fetchButton: null, playlistFinished };
 
   init();
 })();

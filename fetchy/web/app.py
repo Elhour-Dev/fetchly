@@ -92,7 +92,7 @@ async def add_security_headers(request: Request, call_next):
 async def friendly_error_handler(_: Request, exc: FriendlyError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.code, "message": exc.message, "detail": exc.detail},
+        content={**exc.extra, "error": exc.code, "message": exc.message, "detail": exc.detail},
     )
 
 

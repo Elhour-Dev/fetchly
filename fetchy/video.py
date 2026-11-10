@@ -136,13 +136,13 @@ def _progress_hooks(job_id: str):
     return progress_hook, postprocessor_hook
 
 
-def _run_download(job_id: str, url: str, options: dict[str, Any], attempts: list[dict[str, Any]]) -> None:
-    """Try each option set in turn; the last one is the plain fallback."""
+def _run_download(job_id: str, url: str, options: dict[str, Any], attempts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Try each option set in turn; the last one is the plain fallback. Returns what yt-dlp knows about the video."""
     for number, extra in enumerate(attempts):
         try:
             with engine.yt_dlp.YoutubeDL({**options, **extra}) as ydl:
-                ydl.download([url])
-            return
+                info = ydl.extract_info(url, download=True)
+            return info if isinstance(info, dict) else {}
         except Exception:
             if number == len(attempts) - 1:
                 raise
@@ -150,6 +150,7 @@ def _run_download(job_id: str, url: str, options: dict[str, Any], attempts: list
             logger.info("Video job %s: extras failed, retrying without them", job_id)
             cleanup_job_files(job_id)
             job_store.set_progress(job_id, stage="starting", percent=0.0, speed=None, eta=None)
+    return {}
 
 
 def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs_auto: bool = False) -> None:
@@ -182,7 +183,9 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
         attempts = extra_attempts(quality, subs, subs_auto)
 
     try:
-        _run_download(job_id, job.url, options, attempts)
+        info = _run_download(job_id, job.url, options, attempts)
+        if not job.video.get("title"):   # details were not read before the download: name the file now
+            job.video["title"] = str(info.get("title") or "").strip()[:300]
         if is_playlist:
             job_store.set_progress(job_id, stage="processing", percent=100.0, speed=None, eta=None)
             zip_path = playlist_zip.zip_playlist(job_id)

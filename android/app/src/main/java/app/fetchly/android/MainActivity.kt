@@ -50,6 +50,7 @@ class MainActivity : ThemedActivity() {
     private var loading = false
     private var failed = false
     private var loadSeq = 0
+    private var wasRunning = false
     private val loader = Runnable { loadQualities() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,7 +103,8 @@ class MainActivity : ThemedActivity() {
             override fun afterTextChanged(s: android.text.Editable?) { url.removeCallbacks(loader); url.postDelayed(loader, 500) }
         })
 
-        download = button("Download", Kind.PRIMARY, 64) { startDownload() }.apply { textSize = 19f }
+        // Hidden until the qualities are loaded (or could not be loaded): see renderQuality().
+        download = button("Download", Kind.PRIMARY, 64) { startDownload() }.apply { textSize = 19f; visibility = View.GONE }
         box.add(download, 14, -1, dp(64))
 
         // One status card: progress, done, or error.
@@ -276,6 +278,11 @@ class MainActivity : ThemedActivity() {
     private fun renderQuality() {
         val has = loading || options != null || failed
         show(qCard, has)
+        // The Download button appears with the qualities. If they could not be loaded it appears alone and
+        // downloads the best quality. A playlist-only link gets it at once: the playlist screen has its own choice.
+        val link = urlRegex.find(url.text.toString())?.value
+        val listOnly = link != null && Pl.isList(link) && !Pl.hasVideo(link)
+        show(download, options != null || failed || listOnly)
         qList.removeAllViews()
         qNote.text = when {
             loading -> if (ready) "Checking what this video offers…" else "Getting ready…"
@@ -336,6 +343,9 @@ class MainActivity : ThemedActivity() {
         val running = p == State.Phase.RUNNING
         download.isEnabled = !running
         download.alpha = if (download.isEnabled) 1f else 0.5f
+        // A link pasted during a download is checked once the download is over.
+        if (wasRunning && !running) url.post { loadQualities() }
+        wasRunning = running
 
         show(status, p != State.Phase.IDLE)
         val downloading = running && ready && State.stage == State.Stage.DOWNLOAD

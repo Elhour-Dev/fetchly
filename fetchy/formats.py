@@ -135,6 +135,13 @@ def build_subtitle_options(info: dict[str, Any]) -> list[dict[str, Any]]:
     return found[:60]
 
 
+# The only choice offered when the video details could not be read.
+BEST_ONLY_FORMATS = ({
+    "key": "best", "label": "Best quality", "detail": "Highest available", "kind": "video",
+    "size_bytes": None, "recommended": True,
+},)
+
+
 def format_selector(quality: str) -> str:
     """yt-dlp format string for a quality key. Rejects anything unknown."""
     if quality in QUALITY_FORMAT_SELECTORS:

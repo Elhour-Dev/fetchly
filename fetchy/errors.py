@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 
 class FriendlyError(Exception):
     """An expected error whose message is safe to show to the user."""
 
-    def __init__(self, message: str, status_code: int = 400, code: str = "request_failed", detail: str = ""):
+    def __init__(
+        self, message: str, status_code: int = 400, code: str = "request_failed", detail: str = "",
+        extra: dict[str, Any] | None = None,
+    ):
         super().__init__(message)
         self.message = message
         self.detail = detail
         self.status_code = status_code
         self.code = code
+        self.extra = extra or {}   # more fields for the JSON error body, e.g. a job_id the client can still use
 
 
 class MediaFetchError(FriendlyError):
@@ -23,11 +28,11 @@ class MediaFetchError(FriendlyError):
 
 LOGIN_HELP = (
     "This site needs a login. Log in to it in Firefox, then open Help > Cookies and press "
-    "\"Use Firefox cookies\". Then try again."
+    "\"Use browser cookies\". Then try again."
 )
 LOGIN_HELP_BOT = (
-    "YouTube wants to confirm you're not a bot. Sign in to YouTube in your browser, "
-    "then start Fetchy with FETCHLY_COOKIES_BROWSER=chrome (or firefox, edge) and try again."
+    "YouTube wants to confirm you're not a bot. Log in to YouTube in Firefox, then open "
+    "Help > Cookies and press \"Use browser cookies\". Then try again."
 )
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
