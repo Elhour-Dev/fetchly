@@ -65,7 +65,7 @@ class HistoryActivity : ThemedActivity() {
         setContentView(scroll)
     }
 
-    override fun onResume() { super.onResume(); Theme.syncIcon(this); render() }
+    override fun onResume() { super.onResume(); render() }
 
     private fun render() {
         list.removeAllViews()

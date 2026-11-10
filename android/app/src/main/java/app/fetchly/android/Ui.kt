@@ -35,7 +35,7 @@ fun Context.label(s: String, size: Float = 15f, color: Int = R.color.text, bold:
         if (selectable) setTextIsSelectable(true)
     }
 
-enum class Kind { PRIMARY, TONAL, GHOST, DANGER }
+enum class Kind { PRIMARY, TONAL, GHOST, DANGER, YOUTUBE, INSTAGRAM }
 
 fun Context.button(text: String, kind: Kind = Kind.TONAL, height: Int = 48, onClick: () -> Unit) = Button(this).apply {
     this.text = text; isAllCaps = false; textSize = 16f; minHeight = 0; minimumHeight = 0; minWidth = 0
@@ -45,6 +45,8 @@ fun Context.button(text: String, kind: Kind = Kind.TONAL, height: Int = 48, onCl
         Kind.PRIMARY -> Triple(col(R.color.accent), col(R.color.on_accent), 0)
         Kind.TONAL -> Triple(col(R.color.tonal_bg), col(R.color.tonal_text), 0)
         Kind.GHOST -> Triple(col(R.color.card), col(R.color.text), col(R.color.border))
+        Kind.YOUTUBE -> Triple(0xFFE62117.toInt(), 0xFFFFFFFF.toInt(), 0)
+        Kind.INSTAGRAM -> Triple(0xFFC13584.toInt(), 0xFFFFFFFF.toInt(), 0)
         Kind.DANGER -> Triple(col(R.color.card), col(R.color.err_text), col(R.color.err_border))
     }
     setTextColor(fg)

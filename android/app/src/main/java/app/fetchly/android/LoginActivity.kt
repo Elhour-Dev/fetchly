@@ -14,13 +14,11 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.LinearLayout
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 
 /**
- * Lets the user log in to a site inside the app. On "Done" the cookies go to the private cookies file for yt-dlp.
+ * Lets the user log in to a site inside the app. When the user taps "Done" the cookies go to the private cookies file for yt-dlp.
  * Nothing is bypassed: if a site (for example Google) refuses WebView logins, we just say so.
  */
 class LoginActivity : ThemedActivity() {
@@ -29,7 +27,6 @@ class LoginActivity : ThemedActivity() {
     private lateinit var noticeText: android.widget.TextView
     private val hosts = LinkedHashSet<String>()
     private lateinit var base: String
-    private val handler = Handler(Looper.getMainLooper())
     private var finished = false
 
     companion object {
@@ -38,11 +35,6 @@ class LoginActivity : ThemedActivity() {
     }
 
     private fun log(msg: String) = Log.d(TAG, msg)
-
-    /** Checks for the session cookie by itself, so the user does not have to tap Done. */
-    private val poll = object : Runnable {
-        override fun run() { if (!finished) { check(); handler.postDelayed(this, 1000) } }
-    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,7 +82,7 @@ class LoginActivity : ThemedActivity() {
                 return s != "https" && s != "http"   // never hand off to other apps
             }
             override fun onPageStarted(v: WebView, url: String, icon: Bitmap?) { seen(url) }
-            override fun onPageFinished(v: WebView, url: String) { seen(url); log("page finished: " + safe(url)); check() }
+            override fun onPageFinished(v: WebView, url: String) { seen(url); log("page finished: " + safe(url)) }
             // The site refused to open here. We do not work around it: we point to the cookies.txt import.
             override fun onReceivedError(v: WebView, r: WebResourceRequest, e: WebResourceError) {
                 if (r.isForMainFrame) { log("load error ${e.errorCode} on " + safe(r.url.toString())); blocked() }
@@ -103,7 +95,7 @@ class LoginActivity : ThemedActivity() {
         setContentView(root)
 
         // Start from a clean browser so an old session cannot leak in; saved cookies stay in the private file.
-        CookieManager.getInstance().removeAllCookies { runOnUiThread { web.loadUrl(start); handler.postDelayed(poll, 1000) } }
+        CookieManager.getInstance().removeAllCookies { runOnUiThread { web.loadUrl(start) } }
     }
 
     /** host + path only: no query, no fragment. */
@@ -115,15 +107,6 @@ class LoginActivity : ThemedActivity() {
         noticeText.text = "This site did not open its login page inside the app. Fetchy does not work around that. " +
             "Tap Cancel, or use \"Import cookies.txt\" below."
         notice.visibility = View.VISIBLE
-    }
-
-    /** If the session cookie is there, save, verify, say "Logged in" and close the page. */
-    private fun check() {
-        if (finished) return
-        val known = Cookies.sessionNames(base) ?: return   // unknown site: the user taps Done
-        val lines = Cookies.fromWebView(hosts, base)
-        if (!Cookies.hasSession(lines, base)) return
-        save(lines, known)
     }
 
     private fun save(lines: List<String>, known: Set<String>?) {
@@ -168,7 +151,6 @@ class LoginActivity : ThemedActivity() {
     override fun onBackPressed() { if (web.canGoBack()) web.goBack() else finish() }
 
     override fun onDestroy() {
-        handler.removeCallbacks(poll)
         Cookies.clearWebView()
         web.destroy()
         super.onDestroy()

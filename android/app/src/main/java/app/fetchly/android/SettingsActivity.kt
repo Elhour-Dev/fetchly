@@ -26,7 +26,7 @@ class SettingsActivity : ThemedActivity() {
         ap.addView(label("Appearance", 18f, bold = true))
         val cur = Theme.mode(this)
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("system" to "Auto", "light" to "Light", "dark" to "Dark").forEachIndexed { i, (m, n) ->
+        listOf("system" to "System", "light" to "Light", "dark" to "Dark").forEachIndexed { i, (m, n) ->
             row.addView(button(n, if (m == cur) Kind.PRIMARY else Kind.GHOST, 44) {
                 Theme.set(this, m); recreate()
             }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i > 0) marginStart = dp(8) })
@@ -48,10 +48,8 @@ class SettingsActivity : ThemedActivity() {
         cookieInfo = label("", 14f, R.color.muted)
         ck.add(cookieInfo, 4)
         ck.add(label("Only needed when a site asks for a login. " + Help.COOKIE_NOTE, 14f, R.color.muted), 6)
-        ck.add(button("Log in again", Kind.PRIMARY) {
-            val url = getSharedPreferences("prefs", MODE_PRIVATE).getString("login_url", null)
-            startActivity(Intent(this, LoginActivity::class.java).putExtra("url", url))
-        }, 14)
+        ck.add(button("YouTube login", Kind.YOUTUBE) { login(Cookies.YOUTUBE_LOGIN) }, 14)
+        ck.add(button("Instagram login", Kind.INSTAGRAM) { login(Cookies.INSTAGRAM_LOGIN) }, 8)
         ck.add(button("Import cookies.txt", Kind.TONAL) {
             @Suppress("DEPRECATION") startActivityForResult(Cookies.pickIntent(), 20)
         }, 8)
@@ -74,7 +72,9 @@ class SettingsActivity : ThemedActivity() {
         }
     }
 
-    override fun onResume() { super.onResume(); Theme.syncIcon(this); refresh() }
+    private fun login(url: String) = startActivity(Intent(this, LoginActivity::class.java).putExtra("url", url))
+
+    override fun onResume() { super.onResume(); refresh() }
 
     private fun refresh() {
         val has = Tools.cookiesFile(this).exists()

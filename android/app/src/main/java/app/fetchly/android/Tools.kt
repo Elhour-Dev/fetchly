@@ -132,6 +132,9 @@ object Cookies {
 
     fun hostOf(url: String): String = try { android.net.Uri.parse(url).host ?: "" } catch (_: Exception) { "" }
 
+    const val YOUTUBE_LOGIN = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F"
+    const val INSTAGRAM_LOGIN = "https://www.instagram.com/accounts/login/"
+
     /** Where to send the user to log in for a failed link. */
     fun loginUrl(link: String): String {
         val base = baseDomain(hostOf(link))
@@ -142,7 +145,7 @@ object Cookies {
             "tiktok.com" -> "https://www.tiktok.com/login"
             "reddit.com" -> "https://www.reddit.com/login/"
             "vimeo.com" -> "https://vimeo.com/log_in"
-            "youtube.com", "youtu.be" -> "https://www.youtube.com/"
+            "youtube.com", "youtu.be" -> YOUTUBE_LOGIN
             "" -> "https://www.instagram.com/accounts/login/"
             else -> "https://$base/"
         }

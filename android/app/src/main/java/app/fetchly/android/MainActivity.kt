@@ -29,6 +29,7 @@ class MainActivity : ThemedActivity() {
     private lateinit var spin: android.widget.ProgressBar
     private lateinit var cancel: View
     private lateinit var logIn: View
+    private lateinit var dismiss: View
     private lateinit var importBtn: View
     private lateinit var retry: View
     private lateinit var fix: View
@@ -103,7 +104,9 @@ class MainActivity : ThemedActivity() {
         url.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) { url.removeCallbacks(loader); url.postDelayed(loader, 500) }
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (State.phase == State.Phase.ERROR) { State.phase = State.Phase.IDLE; State.text = ""; State.needsLogin = false; State.helpTopic = null; State.cookiesSaved = false; render() }   // a new link clears the old error
+                url.removeCallbacks(loader); url.postDelayed(loader, 500) }
         })
 
         // Hidden until the qualities are loaded (or could not be loaded): see renderQuality().
@@ -132,6 +135,8 @@ class MainActivity : ThemedActivity() {
             startActivityForResult(Intent(this, LoginActivity::class.java).putExtra("url", Cookies.loginUrl(State.failedUrl)), 21)
         }
         status.add(logIn, 14)
+        dismiss = button("Cancel", Kind.GHOST) { State.phase = State.Phase.IDLE; State.changed() }
+        status.add(dismiss, 8)
         importBtn = button("Import cookies.txt", Kind.TONAL) {
             @Suppress("DEPRECATION") startActivityForResult(Cookies.pickIntent(), 20)
         }
@@ -181,7 +186,6 @@ class MainActivity : ThemedActivity() {
     override fun onResume() {
         super.onResume()
         if (Theme.mode(this) != shownTheme) { recreate(); return }
-        Theme.syncIcon(this)
         State.listener = { render() }; render()
     }
     override fun onDestroy() { State.listener = null; super.onDestroy() }
@@ -398,8 +402,8 @@ class MainActivity : ThemedActivity() {
                         else -> "Fetchy has your $base login, but the site still asked for one. " +
                             "The login may have expired, or this account cannot see this link. Log in again, or import a fresh cookies.txt. "
                     }
-                    else if (login) "Tap \"Log in\" and sign in; " +
-                        "Fetchy closes the page and retries by itself. If the site does not allow it, tap \"Import cookies.txt\". " else "") + at
+                    else if (login) "Tap \"Log in\", sign in, then tap Done. Fetchy then retries by itself. " +
+                        "If the site does not allow it, use \"Import cookies.txt\" in Settings. " else "") + at
                 }
             }
             else -> {}
@@ -409,9 +413,9 @@ class MainActivity : ThemedActivity() {
             showUpdateDialog(true) { startDownload() }
         }
         show(sSub, sSub.text.isNotEmpty())
-        show(logIn, login); show(importBtn, login); show(retry, retryMode)
-        show(fix, err && State.helpTopic != null)
-        show(copy, err)
+        show(logIn, login); show(dismiss, login); show(importBtn, false); show(retry, retryMode)
+        show(fix, err && !login && State.helpTopic != null)
+        show(copy, err && !login)
     }
 
     private fun tint(bg: Int, border: Int, title: Int, sub: Int) {
