@@ -10,6 +10,7 @@ Release Fetchy version $ARGUMENTS (format X.Y.Z). Follow CLAUDE.md. Main branch 
 2. Bump version to X.Y.Z in:
    - `desktop/package.json` (`version`)
    - `android/app/build.gradle.kts` (`versionName` = X.Y.Z, `versionCode` + 1)
+   - `fetchy/config.py` (`APP_VERSION`, shown by `/api/health`)
 3. Run the `security-reviewer` agent on the pending diff. Stop if it finds cookies, keys or personal files.
 4. Build:
    - Windows installer: `cd desktop && npm run dist` -> `desktop/dist/Fetchy-Setup-X.Y.Z.exe`
