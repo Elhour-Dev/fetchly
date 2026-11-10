@@ -51,6 +51,37 @@ object AppUpdate {
         }
     } catch (e: Exception) { null }
 
+    // A downloaded update waiting for the "install apps" permission (kept in memory only).
+    @Volatile private var pending: Uri? = null
+
+    /**
+     * Opens the system installer for the downloaded update. The notification tap does nothing on some phones,
+     * so Fetchy does it. If Fetchy may not install apps yet, the setting opens first; the install continues on return.
+     */
+    fun install(ctx: android.content.Context, uri: Uri) {
+        if (!ctx.packageManager.canRequestPackageInstalls()) {
+            pending = uri
+            android.widget.Toast.makeText(ctx, "Allow Fetchy to install updates, then come back.", android.widget.Toast.LENGTH_LONG).show()
+            try {
+                ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + ctx.packageName))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) { /* no settings screen: the file stays in Downloads */ }
+            return
+        }
+        pending = null
+        try {
+            ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(ctx, "Open the new Fetchy .apk from your Downloads to install it.", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Called when the app comes back to the front: finish an install that was waiting for the permission. */
+    fun installPending(ctx: android.content.Context) {
+        val u = pending ?: return
+        if (ctx.packageManager.canRequestPackageInstalls()) install(ctx, u)
+    }
 }
 
 /** At every startup: if a newer release exists, show a pop-up. Silent on any failure. Never installs. */
@@ -90,7 +121,7 @@ private fun Activity.showAppUpdateDialog(rel: AppUpdate.Release) {
     )
 }
 
-/** Downloads the .apk with the system download manager (tap the notification to install). False if not possible. */
+/** Downloads the .apk with the system download manager, then opens the installer by itself. False if not possible. */
 private fun Activity.downloadApk(rel: AppUpdate.Release): Boolean {
     val link = rel.apk ?: return false
     return try {
@@ -100,8 +131,21 @@ private fun Activity.downloadApk(rel: AppUpdate.Release): Boolean {
             .setMimeType("application/vnd.android.package-archive")
             .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
-        getSystemService(android.app.DownloadManager::class.java).enqueue(req)
-        android.widget.Toast.makeText(this, "Downloading $name…", android.widget.Toast.LENGTH_LONG).show()
+        val dm = getSystemService(android.app.DownloadManager::class.java)
+        val id = dm.enqueue(req)
+        val app = applicationContext
+        val rx = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context, i: Intent) {
+                if (i.getLongExtra(android.app.DownloadManager.EXTRA_DOWNLOAD_ID, -1) != id) return
+                try { app.unregisterReceiver(this) } catch (e: Exception) { }
+                val uri = try { dm.getUriForDownloadedFile(id) } catch (e: Exception) { null }   // null when the download failed
+                if (uri != null) AppUpdate.install(app, uri)
+            }
+        }
+        val filter = android.content.IntentFilter(android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (android.os.Build.VERSION.SDK_INT >= 33) app.registerReceiver(rx, filter, android.content.Context.RECEIVER_EXPORTED)
+        else @Suppress("UnspecifiedRegisterReceiverFlag") app.registerReceiver(rx, filter)
+        android.widget.Toast.makeText(this, "Downloading $name… The install screen opens when it is done.", android.widget.Toast.LENGTH_LONG).show()
         true
     } catch (e: Exception) { false }
 }

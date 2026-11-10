@@ -191,6 +191,7 @@ class MainActivity : ThemedActivity() {
         super.onResume()
         if (Theme.mode(this) != shownTheme) { recreate(); return }
         State.listener = { render() }; render()
+        AppUpdate.installPending(this)   // an update that was waiting for the "install apps" permission
     }
     override fun onDestroy() { State.listener = null; super.onDestroy() }
 
