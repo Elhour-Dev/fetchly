@@ -49,3 +49,7 @@ keystore-info.txt
 
 # Graphify output
 graphify-out/
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/

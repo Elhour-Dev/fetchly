@@ -37,17 +37,17 @@ Fetchy is designed as a local, single-user utility. Paste a public video URL to 
 
 ## Download for Windows
 
-1. Go to the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchy-Setup-1.0.0.exe`.
+1. Go to the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchy-Setup-X.Y.Z.exe` (the newest version).
 2. Run it. No admin rights needed. yt-dlp and ffmpeg are already inside.
 3. Windows may show "Protected your PC". Click **More info**, then **Run anyway**.
 4. Videos save to your Downloads folder. Use **Update tools** to get the newest yt-dlp.
 
-Check the download with the SHA256 value in the release notes (`Get-FileHash Fetchy-Setup-1.0.0.exe`).
+Check the download with the SHA256 value in the release notes (`Get-FileHash Fetchy-Setup-X.Y.Z.exe`).
 License notices (ffmpeg is GPL v3, yt-dlp is Unlicense): see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Download for Android
 
-1. On your phone, open the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchy-1.0.0.apk`.
+1. On your phone, open the [latest release](https://github.com/Elhour-Dev/fetchly/releases/latest) and download `Fetchy-X.Y.Z.apk` (the newest version).
 2. Open the file. Android will ask to allow installs from your browser or Files app. Allow it for this install.
 3. Share a video link to Fetchy, or paste it in the app. Videos save to your Downloads folder.
 4. Login problems? The app shows a **Log in** button. If the site blocks that, use **Import cookies.txt**. Open **Help** in the app for steps.
@@ -139,9 +139,9 @@ python main.py
 uvicorn main:app --reload
 ```
 
-Open <http://127.0.0.1:8000>.
+Open <http://127.0.0.1:8001>.
 
-The API docs are available at <http://127.0.0.1:8000/docs>.
+The API docs are available at <http://127.0.0.1:8001/docs>.
 
 ### First check
 
@@ -156,15 +156,40 @@ The API docs are available at <http://127.0.0.1:8000/docs>.
 
 ```text
 .
-├── main.py              # FastAPI app, job store, SSE, yt-dlp logic, safety
-├── requirements.txt
-├── README.md
-├── downloads/           # generated files (auto-cleaned; .gitkeep only in git)
-├── templates/
-│   └── index.html       # Tailwind UI
-└── static/
-    ├── app.js           # vanilla JS: tabs, fetch, SSE, grid, toasts, theme
-    └── favicon.svg
+├── main.py                  # entry point (python main.py / uvicorn main:app)
+├── fetchy/                  # the backend
+│   ├── config.py            # settings from env vars, paths, constants
+│   ├── errors.py            # safe errors + friendly yt-dlp messages
+│   ├── utils.py             # time, number parsing, safe file names
+│   ├── urls.py              # URL checks (SSRF guard)
+│   ├── jobs.py              # in-memory jobs + file cleanup
+│   ├── ratelimit.py         # per-client rate limits
+│   ├── http_fetch.py        # thumbnail fetch with checked redirects
+│   ├── engine.py            # the loaded yt-dlp (swapped after an update)
+│   ├── updater.py           # "Update tools" (yt-dlp)
+│   ├── cookies.py           # login cookies (file or browser)
+│   ├── ydl_options.py       # shared yt-dlp options
+│   ├── formats.py           # quality/subtitle choices
+│   ├── video.py             # single video: info + download
+│   ├── playlist.py          # playlist queue (desktop app)
+│   └── web/                 # FastAPI app, auth, routes_*.py
+├── templates/index.html     # Tailwind UI
+├── static/                  # app.js, playlist.js, help.js, icons
+├── tests/                   # pytest tests
+├── desktop/                 # Electron wrapper (Windows installer)
+├── android/                 # Android app (Kotlin)
+├── downloads/               # generated files (auto-cleaned)
+├── requirements.txt         # app dependencies
+└── requirements-dev.txt     # + pytest and ruff
+```
+
+### Tests and lint
+
+```bash
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements-dev.txt   # macOS/Linux: .venv/bin/python
+.venv/Scripts/python -m pytest
+.venv/Scripts/python -m ruff check .
 ```
 
 ---
@@ -184,7 +209,7 @@ The API docs are available at <http://127.0.0.1:8000/docs>.
 Example:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/video/info \
+curl -X POST http://127.0.0.1:8001/api/video/info \
   -H "Content-Type: application/json" \
   -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
 ```
@@ -198,7 +223,7 @@ Environment variables (all optional):
 | Variable | Default | Description |
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | Bind address |
-| `PORT` | `8000` | Port |
+| `PORT` | `8001` | Port |
 | `DOWNLOAD_TTL_SECONDS` | `3600` | File and job lifetime |
 | `CLEANUP_INTERVAL_SECONDS` | `600` | Cleanup sweep interval |
 | `MAX_PREVIEW_BYTES` | `20971520` (20 MB) | Preview proxy cap |
