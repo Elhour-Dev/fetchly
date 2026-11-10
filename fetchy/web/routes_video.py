@@ -22,6 +22,7 @@ from ..errors import FriendlyError, friendly_ytdlp_error, strip_ansi
 from ..formats import format_selector
 from ..http_fetch import fetch_public_bytes, inspect_image_bytes
 from ..jobs import TERMINAL_STATES, Job, job_store
+from ..playlist_zip import extract_playlist_info_sync
 from ..ratelimit import rate_limit
 from ..urls import ensure_public_url
 from ..utils import utc_now
@@ -33,6 +34,7 @@ router = APIRouter()
 
 class UrlRequest(BaseModel):
     url: str = Field(min_length=1, max_length=4096)
+    playlist: bool = False   # web version: whole playlist as one ZIP
 
 
 class VideoDownloadRequest(BaseModel):
@@ -61,7 +63,7 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
 
     try:
         info = await asyncio.wait_for(
-            asyncio.to_thread(extract_video_info_sync, url),
+            asyncio.to_thread(extract_playlist_info_sync if payload.playlist else extract_video_info_sync, url),
             timeout=config.VIDEO_INFO_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
@@ -84,6 +86,7 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
         "uploader": info["uploader"],
         "extractor": info["extractor"],
         "has_thumbnail": bool(info["thumbnail_url"]),
+        "is_playlist": bool(info.get("is_playlist")),
         "formats": info["formats"],
         "subtitles": info.get("subtitles", []),
     }

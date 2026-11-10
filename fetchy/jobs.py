@@ -17,6 +17,7 @@ from .utils import iso, utc_now
 
 TERMINAL_STATES = {"complete", "error"}
 _BUSY_STATES = {"downloading", "working", "fetching_info", "processing"}
+_ID_LENGTH = 36   # a job id is a UUID string
 
 
 def _empty_progress() -> dict[str, Any]:
@@ -158,8 +159,8 @@ def _remove_old_files(folder: Path, active_ids: set[str]) -> int:
     for entry in folder.iterdir():
         if entry.name == ".gitkeep":
             continue
-        # Files of a running job ("<id>.f137.mp4.part", "<id>.mp4"...) are never removed.
-        if entry.name.split(".", 1)[0] in active_ids:
+        # Files of a running job ("<id>.f137.mp4.part", "<id>_pl/"...) are never removed.
+        if entry.name[:_ID_LENGTH] in active_ids:
             continue
         try:
             if entry.stat().st_mtime >= cutoff:

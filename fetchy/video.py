@@ -6,9 +6,10 @@ import contextlib
 from pathlib import Path
 from typing import Any
 
-from . import config, engine
+from . import config, engine, playlist_zip
 from .config import logger
 from .errors import LOGIN_HELP_BOT, FriendlyError, friendly_ytdlp_error
+from .config import AUDIO_KEYS
 from .formats import build_format_options, build_subtitle_options, extra_attempts, format_selector
 from .jobs import job_store
 from .utils import coerce_float, coerce_int, sanitize_filename
@@ -172,9 +173,23 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
         "windowsfilenames": True,
         "restrictfilenames": True,
     })
+    is_playlist = bool(job.video.get("is_playlist"))
+    if is_playlist:
+        options.update(playlist_zip.playlist_options(job_id))
+        # Playlists: plain audio extraction (no per-file cover art), no subtitles.
+        attempts = extra_attempts(quality, None, False)[-1:] if quality in AUDIO_KEYS else [{}]
+    else:
+        attempts = extra_attempts(quality, subs, subs_auto)
 
     try:
-        _run_download(job_id, job.url, options, extra_attempts(quality, subs, subs_auto))
+        _run_download(job_id, job.url, options, attempts)
+        if is_playlist:
+            job_store.set_progress(job_id, stage="processing", percent=100.0, speed=None, eta=None)
+            zip_path = playlist_zip.zip_playlist(job_id)
+            name = sanitize_filename(job.video.get("title") or "playlist", fallback="playlist", max_length=95, extension=".zip")
+            job_store.complete(job_id, file_path=zip_path, download_name=name)
+            logger.info("Playlist job %s complete (%s)", job_id, zip_path.name)
+            return
         final_file = find_finished_file(job_id)
         if not final_file:
             raise FriendlyError("The download finished, but no output file was found. Please try again.", 500, "missing_output")
@@ -189,11 +204,13 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
         job_store.complete(job_id, file_path=final_file, download_name=download_name)
         logger.info("Video job %s complete (%s)", job_id, final_file.name)
     except FriendlyError as exc:
+        playlist_zip.remove_work_dir(job_id)
         cleanup_job_files(job_id)
         job_store.fail(job_id, exc.message)
         logger.warning("Video job %s failed: %s", job_id, exc.message)
     except Exception as exc:
         message = friendly_ytdlp_error(exc)
+        playlist_zip.remove_work_dir(job_id)
         cleanup_job_files(job_id)
         job_store.fail(job_id, message)
         logger.warning("Video job %s failed: %s", job_id, message)

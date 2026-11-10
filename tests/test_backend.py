@@ -228,3 +228,78 @@ def test_single_video_options_use_youtube_clients():
     a, b = single_video_options(), single_video_options()
     assert a["extractor_args"]["youtube"]["player_client"][0] == "android"
     assert a["extractor_args"] is not b["extractor_args"]   # fresh dict each time
+
+
+# --- Web version: whole playlist as a ZIP -----------------------------------
+
+def test_zip_playlist_download(tmp_path, monkeypatch):
+    import zipfile
+
+    monkeypatch.setattr(config, "DOWNLOADS_DIR", tmp_path)
+    job = jobs.job_store.create(kind="video", url="https://example.com/list", state="downloading")
+    jobs.job_store.update(job.id, video={"title": "My list (2 videos)", "is_playlist": True, "formats": []})
+    seen = {}
+    real_validate = engine.yt_dlp.YoutubeDL.validate_outtmpl
+
+    class FakeYDL:
+        validate_outtmpl = staticmethod(real_validate)   # used by yt-dlp's option parser
+
+        def __init__(self, opts):
+            seen.update(opts)
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def download(self, urls):
+            for n in (1, 2):
+                path = Path(self.opts["outtmpl"].replace("%(playlist_index)03d", f"{n:03d}")
+                            .replace("%(title).80s", f"v{n}").replace("%(ext)s", "mp4"))
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"x")
+
+    monkeypatch.setattr(engine.yt_dlp, "YoutubeDL", FakeYDL)
+    video.download_video_sync(job.id, "audio")
+    done = jobs.job_store.get(job.id)
+    assert done.state == "complete"
+    assert done.download_name == "My list (2 videos).zip"
+    assert seen["noplaylist"] is False and seen["ignoreerrors"] is True
+    assert seen["postprocessors"][0]["key"] == "FFmpegExtractAudio"
+    with zipfile.ZipFile(done.file_path) as zf:
+        assert zf.namelist() == ["001 - v1.mp4", "002 - v2.mp4"]
+    assert not (tmp_path / f"{job.id}_pl").exists()
+
+
+def test_cleanup_keeps_running_playlist_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DOWNLOADS_DIR", tmp_path)
+    store = jobs.JobStore()
+    running = store.create(kind="video", url="https://example.com/", state="downloading")
+    folder = tmp_path / f"{running.id}_pl"
+    folder.mkdir()
+    old = time.time() - config.DOWNLOAD_TTL_SECONDS - 60
+    os.utime(folder, (old, old))
+    store.cleanup()
+    assert folder.exists()
+
+
+def test_video_info_accepts_playlist_flag(client, monkeypatch):
+    from fetchy import playlist_zip
+
+    monkeypatch.setattr(urls, "host_is_public", lambda host: True)
+    monkeypatch.setattr(playlist_zip, "extract_playlist_info_sync", lambda url: None)
+    calls = []
+
+    def fake(url):
+        calls.append(url)
+        return {"title": "L (1 videos)", "duration": None, "webpage_url": url, "uploader": "", "extractor": "",
+                "thumbnail_url": None, "is_playlist": True, "formats": [{"key": "best"}]}
+
+    import fetchy.web.routes_video as rv
+    monkeypatch.setattr(rv, "extract_playlist_info_sync", fake)
+    r = client.post("/api/video/info", json={"url": "https://example.com/list?list=1", "playlist": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["video"]["is_playlist"] is True
+    assert calls

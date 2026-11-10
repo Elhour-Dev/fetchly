@@ -172,6 +172,7 @@ The API docs are available at <http://127.0.0.1:8001/docs>.
 │   ├── formats.py           # quality/subtitle choices
 │   ├── video.py             # single video: info + download
 │   ├── playlist.py          # playlist queue (desktop app)
+│   ├── playlist_zip.py      # whole playlist as one ZIP (web version)
 │   └── web/                 # FastAPI app, auth, routes_*.py
 ├── templates/index.html     # Tailwind UI
 ├── static/                  # app.js, playlist.js, help.js, icons
