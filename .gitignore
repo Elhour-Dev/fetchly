@@ -46,3 +46,6 @@ android/.kotlin/
 *.jks
 *.keystore
 keystore-info.txt
+
+# Graphify output
+graphify-out/
