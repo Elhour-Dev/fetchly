@@ -346,7 +346,10 @@
       if (count.failed && (finished || !status.running)) buttons.push(button('Retry failed', act('retry')));
       if (finished) buttons.push(button('Back to the list', backToList));
       ui.buttons.replaceChildren(...buttons);
-      if (finished) F.toast(`Playlist finished: ${bits.join(', ')}.`, count.failed ? 'info' : 'success', 6000);
+      if (finished) {
+        F.toast(`Playlist finished: ${bits.join(', ')}.`, count.failed ? 'info' : 'success', 6000);
+        if (count.done && F.playlistFinished) F.playlistFinished(st.title, document.getElementById('videoUrl').value.trim(), `${count.done} of ${total} done`);
+      }
     }
 
     stopPolling();

@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Environment
 import android.os.IBinder
 import android.provider.MediaStore
@@ -24,11 +25,16 @@ class DownloadService : Service() {
         const val EXTRA_AUDIO = "audio"     // true = extract MP3
         const val EXTRA_USE_INFO = "use_info" // true = reuse the video info saved by the quality picker
         const val EXTRA_PLAYLIST = "playlist" // true = download every video of the playlist
+        const val EXTRA_CODEC = "codec"     // audio file type: "mp3" or "m4a"
+        const val EXTRA_LABEL = "label"     // quality name, shown in the history
+        const val EXTRA_SUBS = "subs"       // subtitle language to embed (null = none)
+        const val EXTRA_SUBS_AUTO = "subs_auto" // true = that language is an automatic caption
         const val ACTION_CANCEL = "cancel"
         private const val PID = "fetchly-download"
         private const val CHANNEL = "downloads"
         private const val NOTIF_ID = 1
         private const val DONE_ID = 2
+        private const val DONE_CHANNEL = "done"
         @Volatile private var working = false
     }
 
@@ -39,6 +45,7 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(DONE_CHANNEL, "Finished downloads", NotificationManager.IMPORTANCE_DEFAULT))
         startForeground(NOTIF_ID, notif("Starting…", 0, true), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
 
         if (intent?.action == ACTION_CANCEL) {
@@ -65,22 +72,40 @@ class DownloadService : Service() {
         val useInfo = intent.getBooleanExtra(EXTRA_USE_INFO, false)
         val pl = intent.getBooleanExtra(EXTRA_PLAYLIST, false)
         State.item = ""
-        thread { work(url, format, audio, useInfo && !pl, pl) }
+        val codec = intent.getStringExtra(EXTRA_CODEC) ?: "mp3"
+        val label = intent.getStringExtra(EXTRA_LABEL) ?: if (audio) "Audio" else "Best quality"
+        val subs = intent.getStringExtra(EXTRA_SUBS)
+        val subsAuto = intent.getBooleanExtra(EXTRA_SUBS_AUTO, false)
+        thread { work(url, format, audio, useInfo && !pl, pl, codec, label, subs, subsAuto) }
         return START_NOT_STICKY
     }
 
-    private fun work(url: String, format: String, audio: Boolean, useInfo: Boolean, playlist: Boolean = false) {
+    private fun work(url: String, format: String, audio: Boolean, useInfo: Boolean, playlist: Boolean = false,
+                     codec: String = "mp3", label: String = "", subs: String? = null, subsAuto: Boolean = false) {
         val dir = File(cacheDir, "job")
         try {
             dir.deleteRecursively(); dir.mkdirs()
             Tools.init(this)
-            fun request(fmt: String, aud: Boolean, info: File? = null) =
+            // x = the extras: cover art and tags for audio, embedded subtitles for video.
+            fun request(fmt: String, aud: Boolean, x: Boolean, info: File? = null) =
                 (if (info != null) YoutubeDLRequest(emptyList()).apply { addOption("--load-info-json", info.absolutePath) }
                 else YoutubeDLRequest(url)).apply {
                 if (playlist) { addOption("--yes-playlist"); addOption("--ignore-errors") } else addOption("--no-playlist")
                 addOption("-f", fmt)
-                if (aud) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
-                else addOption("--merge-output-format", "mp4")
+                if (aud) {
+                    addOption("-x"); addOption("--audio-format", codec)
+                    if (codec == "mp3") addOption("--audio-quality", "192K")
+                    if (x) {
+                        addOption("--embed-metadata")
+                        if (codec == "mp3") { addOption("--embed-thumbnail"); addOption("--convert-thumbnails", "jpg") }
+                    }
+                } else {
+                    addOption("--merge-output-format", "mp4")
+                    if (x && subs != null) {
+                        addOption("--embed-subs"); addOption("--sub-langs", subs); addOption("--convert-subs", "srt")
+                        if (subsAuto) addOption("--write-auto-subs")
+                    }
+                }
                 addOption("--no-mtime")
                 addOption("--trim-filenames", "120")
                 addOption("-o", dir.absolutePath + (if (playlist) "/%(playlist_index)03d - %(title).70s [%(id)s].%(ext)s" else "/%(title).80s [%(id)s].%(ext)s"))
@@ -114,15 +139,27 @@ class DownloadService : Service() {
             }
             // Use the answer saved by the quality picker, so the site is not asked twice. If that fails, ask normally.
             val info = if (useInfo) Quality.infoFile(this).takeIf { it.exists() } else null
-            fun run(fmt: String, aud: Boolean) {
+            fun runOnce(fmt: String, aud: Boolean, x: Boolean) {
                 if (info != null) {
-                    try { YoutubeDL.getInstance().execute(request(fmt, aud, info), PID, progress); return }
+                    try { YoutubeDL.getInstance().execute(request(fmt, aud, x, info), PID, progress); return }
                     catch (e: Exception) {
                         if (cancelled) throw e
                         dir.deleteRecursively(); dir.mkdirs(); State.stage = State.Stage.FETCH; State.percent = 0; last = -1
                     }
                 }
-                YoutubeDL.getInstance().execute(request(fmt, aud), PID, progress)
+                YoutubeDL.getInstance().execute(request(fmt, aud, x), PID, progress)
+            }
+            // Cover art / subtitles are a bonus: if adding them fails, download again without them.
+            val extras = !playlist && (audio || subs != null)
+            fun run(fmt: String, aud: Boolean) {
+                if (!extras) { runOnce(fmt, aud, false); return }
+                try { runOnce(fmt, aud, true) }
+                catch (e: Exception) {
+                    if (cancelled) throw e
+                    dir.deleteRecursively(); dir.mkdirs(); State.stage = State.Stage.FETCH; State.percent = 0; last = -1
+                    State.text = "Extras did not work. Downloading without them…"; State.changed()
+                    runOnce(fmt, aud, false)
+                }
             }
             try {
                 run(format, audio)
@@ -136,19 +173,30 @@ class DownloadService : Service() {
                 run(Quality.BEST, false)
             }
             if (cancelled) throw IllegalStateException("Cancelled")
+            val sideFiles = setOf("jpg", "jpeg", "png", "webp", "srt", "vtt", "ass", "json")
             val files = dir.listFiles()
-                ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") }
+                ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") && it.extension.lowercase() !in sideFiles }
                 ?.sortedBy { it.name }.orEmpty()
             if (files.isEmpty()) throw IllegalStateException("No video file was made (no video found at this link).")
             State.stage = State.Stage.FINISH
             State.item = ""
             State.text = "Finishing up…"; State.percent = 100; State.changed()
+            var openUri: Uri? = null
+            var openMime: String? = null
             val name = if (playlist) { files.forEach { saveToDownloads(it) }; "${files.size} files" }
-                else saveToDownloads(files.maxByOrNull { it.length() }!!)
+                else {
+                    val f = files.maxByOrNull { it.length() }!!
+                    val saved = saveToDownloads(f)
+                    openUri = saved.uri; openMime = saved.mime
+                    f.name
+                }
+            val title = if (playlist) "Playlist · $name" else name.substringBeforeLast('.').replace(Regex(" \\[[^\\]]+\\]$"), "")
+            val tag = if (subs != null && !audio) "$label + subtitles" else label
+            History.add(this, title, url, tag, openUri?.toString(), openMime)
             State.phase = State.Phase.DONE
             State.text = "Done. Saved in Downloads: $name"
             State.changed()
-            notifyDone("Download finished", name)
+            notifyDone("Download finished", name, openUri, openMime)
         } catch (e: Exception) {
             if (cancelled) {
                 State.phase = State.Phase.IDLE; State.text = "Cancelled."
@@ -178,7 +226,9 @@ class DownloadService : Service() {
         }
     }
 
-    private fun saveToDownloads(f: File): String {
+    private class Saved(val name: String, val uri: Uri, val mime: String)
+
+    private fun saveToDownloads(f: File): Saved {
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "video/mp4"
         val cv = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, f.name)
@@ -191,7 +241,7 @@ class DownloadService : Service() {
         contentResolver.openOutputStream(uri)!!.use { out -> f.inputStream().use { it.copyTo(out) } }
         cv.clear(); cv.put(MediaStore.Downloads.IS_PENDING, 0)
         contentResolver.update(uri, cv, null, null)
-        return f.name
+        return Saved(f.name, uri, mime)
     }
 
     private fun openApp() = PendingIntent.getActivity(
@@ -216,11 +266,17 @@ class DownloadService : Service() {
     private fun notify(n: Notification) =
         getSystemService(NotificationManager::class.java).notify(NOTIF_ID, n)
 
-    private fun notifyDone(title: String, text: String) {
-        val n = Notification.Builder(this, CHANNEL)
+    /** Sound + banner when a download ends (can be turned off in Settings). Tapping it opens the file, or the app. */
+    private fun notifyDone(title: String, text: String, uri: Uri? = null, mime: String? = null) {
+        if (!Quality.notifyDone(this)) return
+        val tap = if (uri != null) PendingIntent.getActivity(
+            this, 2, Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime ?: "*/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        ) else openApp()
+        val n = Notification.Builder(this, DONE_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(title).setContentText(text).setAutoCancel(true)
-            .setContentIntent(openApp()).build()
+            .setContentIntent(tap).build()
         getSystemService(NotificationManager::class.java).notify(DONE_ID, n)
     }
 }

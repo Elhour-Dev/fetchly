@@ -43,6 +43,8 @@ class MainActivity : ThemedActivity() {
     private lateinit var qNote: TextView
     private lateinit var qList: LinearLayout
     private var options: List<QOption>? = null
+    private var subs: List<Sub> = emptyList()
+    private lateinit var subsRow: LinearLayout
     private var selected = "best"
     private var loadedLink: String? = null
     private var loading = false
@@ -91,6 +93,8 @@ class MainActivity : ThemedActivity() {
         qCard.add(qNote, 6)
         qList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         qCard.add(qList, 8)
+        subsRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        qCard.add(subsRow, 10)
         box.add(qCard, 14)
         url.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
@@ -135,7 +139,8 @@ class MainActivity : ThemedActivity() {
         status.add(copy, 8)
         box.add(status, 20)
 
-        box.add(label("Finished videos are saved in your Downloads folder.", 14f, R.color.muted), 24)
+        box.add(button("Download history", Kind.GHOST) { startActivity(Intent(this, HistoryActivity::class.java)) }, 20)
+        box.add(label("Finished videos are saved in your Downloads folder.", 14f, R.color.muted), 16)
 
         setContentView(scroll)
         State.listener = { render() }
@@ -223,12 +228,15 @@ class MainActivity : ThemedActivity() {
         cancelLoad()
         renderQuality()
         val opt = if (loadedLink == link) options?.firstOrNull { it.key == selected } else null
+        val sub = if (opt != null && !opt.audio && Quality.subsOn(this)) Quality.pickSub(this, subs) else null
         if (opt != null) Quality.remember(this, opt.key)
         else Toast.makeText(this, if (failed) "Could not load the qualities. Downloading the best quality."
             else "Downloading the best quality.", Toast.LENGTH_LONG).show()
         startForegroundService(Intent(this, DownloadService::class.java).putExtra(DownloadService.EXTRA_URL, link)
             .putExtra(DownloadService.EXTRA_FORMAT, opt?.format).putExtra(DownloadService.EXTRA_AUDIO, opt?.audio == true)
-            .putExtra(DownloadService.EXTRA_USE_INFO, opt != null))
+            .putExtra(DownloadService.EXTRA_USE_INFO, opt != null)
+            .putExtra(DownloadService.EXTRA_CODEC, opt?.codec).putExtra(DownloadService.EXTRA_LABEL, opt?.label)
+            .putExtra(DownloadService.EXTRA_SUBS, sub?.code).putExtra(DownloadService.EXTRA_SUBS_AUTO, sub?.auto == true))
         render()
     }
 
@@ -245,17 +253,18 @@ class MainActivity : ThemedActivity() {
         if (link == null || (Pl.isList(link) && !Pl.hasVideo(link))) { cancelLoad(); loadedLink = null; options = null; failed = false; renderQuality(); return }
         if (link == loadedLink || State.phase == State.Phase.RUNNING) return
         cancelLoad()
-        options = null; failed = false; loading = true
+        options = null; subs = emptyList(); failed = false; loading = true
         if (!ready) { renderQuality(); return }   // starts again when the tools are ready
         loadedLink = link
         renderQuality()
         val seq = loadSeq
         thread {
-            val res = try { Quality.fetch(this, link, "formats-$seq") } catch (e: Exception) { null }
+            val res: Loaded? = try { Quality.fetch(this, link, "formats-$seq") } catch (e: Exception) { null }
             runOnUiThread {
                 if (seq != loadSeq) return@runOnUiThread
                 loading = false
-                options = res?.takeIf { it.isNotEmpty() }
+                options = res?.options?.takeIf { it.isNotEmpty() }
+                subs = if (options != null) res?.subs.orEmpty() else emptyList()
                 failed = options == null
                 val want = Quality.remembered(this)
                 selected = if (options?.any { it.key == want } == true) want else "best"
@@ -296,6 +305,28 @@ class MainActivity : ThemedActivity() {
             o.size?.let { row.addView(label("~" + Quality.size(it), 14f, R.color.muted)) }
             qList.add(row, if (qList.childCount == 0) 0 else 8)
         }
+        renderSubs()
+    }
+
+    /** "Embed subtitles" switch and language button; only for video qualities of a video that has subtitles. */
+    private fun renderSubs() {
+        subsRow.removeAllViews()
+        val sel = options?.firstOrNull { it.key == selected }
+        val has = sel != null && !sel.audio && subs.isNotEmpty()
+        show(subsRow, has)
+        if (!has) return
+        subsRow.addView(android.widget.CheckBox(this).apply {
+            text = "Embed subtitles"; textSize = 15f; setTextColor(col(R.color.text))
+            isChecked = Quality.subsOn(this@MainActivity)
+            setOnCheckedChangeListener { _, on -> Quality.setSubsOn(this@MainActivity, on) }
+        })
+        val cur = Quality.pickSub(this, subs)!!
+        subsRow.add(button("Language: ${cur.name}", Kind.GHOST, 40) {
+            android.app.AlertDialog.Builder(this).setTitle("Subtitle language")
+                .setItems(subs.map { if (it.name == it.code) it.code else "${it.name} (${it.code})" }.toTypedArray()) { _, i ->
+                    Quality.setSubLang(this, subs[i].code); renderSubs()
+                }.show()
+        }, 6, -1, dp(40))
     }
 
     private fun show(v: View, on: Boolean) { v.visibility = if (on) View.VISIBLE else View.GONE }

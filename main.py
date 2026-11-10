@@ -122,7 +122,10 @@ IMAGE_FORMAT_MAP: dict[str, tuple[str, str]] = {
 QUALITY_FORMAT_SELECTORS = {
     "best": "bestvideo*+bestaudio/best",
     "audio": "bestaudio/best",
+    "audio-m4a": "bestaudio[ext=m4a]/bestaudio/best",
 }
+AUDIO_KEYS = {"audio": "mp3", "audio-m4a": "m4a"}   # quality key -> file type
+SUB_CODE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$")
 
 
 # ---------------------------------------------------------------------------
@@ -917,14 +920,39 @@ def build_format_options(info: dict[str, Any], duration: float | None = None) ->
     if audio_best:
         options.append({
             "key": "audio",
-            "label": "Audio only",
-            "detail": "MP3 · 192 kbps",
+            "label": "Audio only (MP3)",
+            "detail": "MP3 · 192 kbps · cover art & tags",
+            "kind": "audio",
+            "size_bytes": audio_size,
+            "recommended": False,
+        })
+        options.append({
+            "key": "audio-m4a",
+            "label": "Audio only (M4A)",
+            "detail": "M4A · original AAC quality · tags",
             "kind": "audio",
             "size_bytes": audio_size,
             "recommended": False,
         })
 
     return options
+
+
+def build_subtitle_options(info: dict[str, Any]) -> list[dict[str, Any]]:
+    """Subtitle languages that can be embedded: all uploaded ones, plus the automatic captions of the video's own language."""
+    found: list[dict[str, Any]] = []
+    for code, tracks in (info.get("subtitles") or {}).items():
+        if code == "live_chat" or not SUB_CODE_RE.match(str(code)) or not tracks:
+            continue
+        name = next((t.get("name") for t in tracks if isinstance(t, dict) and t.get("name")), None)
+        found.append({"code": str(code), "name": str(name or code)[:60], "auto": False})
+    have = {item["code"] for item in found}
+    for code, tracks in (info.get("automatic_captions") or {}).items():
+        base = str(code).removesuffix("-orig")
+        if str(code).endswith("-orig") and SUB_CODE_RE.match(str(code)) and base not in have:
+            name = next((t.get("name") for t in tracks if isinstance(t, dict) and t.get("name")), None)
+            found.append({"code": str(code), "name": f"{name or base} (auto)"[:60], "auto": True})
+    return found[:60]
 
 
 _cookie_warning_lock = threading.Lock()
@@ -1060,6 +1088,7 @@ def extract_video_info_sync(url: str) -> dict[str, Any]:
         "extractor": str(extractor_name)[:80],
         "thumbnail_url": thumbnail,
         "formats": options,
+        "subtitles": build_subtitle_options(info),
     }
 
 
@@ -1101,6 +1130,44 @@ def _format_selector(quality: str) -> str:
     raise FriendlyError("Choose a valid quality option.", 400, "invalid_quality")
 
 
+# Thumbnails and subtitle files that yt-dlp writes next to the media file.
+SIDE_FILE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".srt", ".vtt", ".ass", ".lrc", ".json"}
+
+
+def _has_mutagen() -> bool:
+    try:
+        import mutagen  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _extra_ydl_attempts(quality: str, subs: str | None, subs_auto: bool) -> list[dict[str, Any]]:
+    """yt-dlp options for audio extraction (with cover art and tags) and for embedded subtitles.
+
+    The richest set comes first; the last one is the plain fallback, used when embedding fails."""
+    def parsed(argv: list[str]) -> dict[str, Any]:
+        opts = yt_dlp.parse_options(argv).ydl_opts
+        keep = ("postprocessors", "writethumbnail", "writesubtitles", "writeautomaticsub", "subtitleslangs", "subtitlesformat")
+        return {k: opts[k] for k in keep if k in opts}
+
+    if quality in AUDIO_KEYS:
+        codec = AUDIO_KEYS[quality]
+        argv = ["-x", "--audio-format", codec, "--embed-metadata"]
+        # Cover art: always for MP3; for M4A yt-dlp needs the optional "mutagen" package, so only when it is installed.
+        if codec == "mp3" or _has_mutagen():
+            argv += ["--embed-thumbnail", "--convert-thumbnails", "jpg"]
+        if codec == "mp3":
+            argv += ["--audio-quality", "192K"]
+        plain = {"postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": codec,
+                                     **({"preferredquality": "192"} if codec == "mp3" else {})}]}
+        return [parsed(argv), plain]
+    if subs:
+        argv = ["--embed-subs", "--sub-langs", subs, "--convert-subs", "srt"] + (["--write-auto-subs"] if subs_auto else [])
+        return [parsed(argv), {}]
+    return [{}]
+
+
 def _cleanup_job_files(job_id: str) -> None:
     for path in DOWNLOADS_DIR.glob(f"{job_id}.*"):
         if path.is_file():
@@ -1113,7 +1180,7 @@ def _find_finished_file(job_id: str) -> Path | None:
     for path in DOWNLOADS_DIR.glob(f"{job_id}.*"):
         if not path.is_file():
             continue
-        if path.name.endswith((".part", ".ytdl", ".temp")):
+        if path.name.endswith((".part", ".ytdl", ".temp")) or path.suffix.lower() in SIDE_FILE_SUFFIXES:
             continue
         try:
             if path.stat().st_size <= 0:
@@ -1127,7 +1194,7 @@ def _find_finished_file(job_id: str) -> Path | None:
     return candidates[0]
 
 
-def download_video_sync(job_id: str, quality: str) -> None:
+def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs_auto: bool = False) -> None:
     job = job_store.get(job_id)
     if not job or not job.video:
         return
@@ -1204,16 +1271,24 @@ def download_video_sync(job_id: str, quality: str) -> None:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         },
     })
-    if quality == "audio":
-        options["postprocessors"] = [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",
-        }]
+    attempts = [] if is_playlist and quality not in AUDIO_KEYS else _extra_ydl_attempts(quality, subs, subs_auto)
+    if is_playlist and quality in AUDIO_KEYS:
+        attempts = attempts[-1:]   # playlists: plain audio extraction, no per-file cover art
+    attempts = attempts or [{}]
 
     try:
-        with yt_dlp.YoutubeDL(options) as ydl:
-            ydl.download([job.url])
+        for number, extra in enumerate(attempts):
+            try:
+                with yt_dlp.YoutubeDL({**options, **extra}) as ydl:
+                    ydl.download([job.url])
+                break
+            except Exception:
+                if number == len(attempts) - 1:
+                    raise
+                # Cover art / subtitles failed: start over with the plain download.
+                logger.info("Video job %s: extras failed, retrying without them", job_id)
+                _cleanup_job_files(job_id)
+                job_store.set_progress(job_id, stage="starting", percent=0.0, speed=None, eta=None)
 
         if is_playlist:
             files = sorted(f for f in pl_dir.glob("*") if f.is_file() and not f.name.endswith((".part", ".ytdl", ".temp")))
@@ -1383,6 +1458,7 @@ class UrlRequest(BaseModel):
 class VideoDownloadRequest(BaseModel):
     job_id: str = Field(min_length=1, max_length=64)
     quality: str = Field(min_length=1, max_length=16)
+    subs: str | None = Field(default=None, max_length=32)   # subtitle language to embed (video only)
 
 
 @app.exception_handler(FriendlyError)
@@ -1570,6 +1646,7 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
             "has_thumbnail": bool(info["thumbnail_url"]),
             "is_playlist": bool(info.get("is_playlist")),
             "formats": info["formats"],
+            "subtitles": info.get("subtitles", []),
         }
         job_store.update(
             job.id,
@@ -1618,6 +1695,10 @@ async def video_download(payload: VideoDownloadRequest) -> dict[str, Any]:
     # yt-dlp, so this cannot inject a format string.
     _format_selector(payload.quality)
 
+    subs = (payload.subs or "").strip() or None
+    sub_options = {item["code"]: item for item in job.video.get("subtitles", [])}
+    if subs and (subs not in sub_options or payload.quality in AUDIO_KEYS):
+        subs = None   # unknown language, or audio-only: nothing to embed
     job_store.update(
         job.id,
         state="downloading",
@@ -1632,7 +1713,7 @@ async def video_download(payload: VideoDownloadRequest) -> dict[str, Any]:
             "eta": None,
         },
     )
-    _spawn(asyncio.to_thread(download_video_sync, job.id, payload.quality))
+    _spawn(asyncio.to_thread(download_video_sync, job.id, payload.quality, subs, bool(subs and sub_options[subs]["auto"])))
     return {"job_id": job.id, "state": "downloading"}
 
 

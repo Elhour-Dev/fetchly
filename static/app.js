@@ -53,7 +53,27 @@
     toolVersions: $('toolVersions'),
     videoLive: $('videoLive'),
 
+    presetRow: $('presetRow'),
+    subsRow: $('subsRow'),
+    subsCheck: $('subsCheck'),
+    subsLang: $('subsLang'),
+    notifyCheck: $('notifyCheck'),
+    historySection: $('historySection'),
+    historyCount: $('historyCount'),
+    historyList: $('historyList'),
+    historyClear: $('historyClear'),
+
     toasts: $('toasts'),
+  };
+
+  // Small per-device settings (quick quality, subtitles, notify). Never fatal if storage is blocked.
+  const pref = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem(`fetchly-${key}`); return v === null ? fallback : v; } catch (_) { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem(`fetchly-${key}`, value); } catch (_) {}
+    },
   };
 
   // ---------------------------------------------------------------------
@@ -462,6 +482,11 @@
     });
     const recommended = (video.formats || []).find((format) => format.recommended) || (video.formats || [])[0];
     if (recommended) els.videoQuality.value = recommended.key;
+    // Start from the quick choice the user picked last time (when this video offers it).
+    const wanted = presetKey(pref.get('preset', 'best'));
+    if (wanted) els.videoQuality.value = wanted;
+    renderPresets();
+    renderSubtitles(video.subtitles || []);
     updateFormatHint();
     els.videoComplete.hidden = true;
     els.videoProgress.hidden = true;
@@ -475,16 +500,177 @@
     return (state.video.data?.formats || []).find((format) => format.key === key) || null;
   }
 
+  // ---------------------------------------------------------------------
+  // Quick quality choices, subtitles, notifications
+  // ---------------------------------------------------------------------
+  const PRESETS = [['best', 'Best'], ['1080', '1080p'], ['720', '720p'], ['480', '480p'], ['audio', 'Audio (MP3)']];
+
+  // The quality option this video has for a quick choice: the best one that is not above it.
+  function presetKey(preset) {
+    const formats = state.video.data?.formats || [];
+    if (preset === 'audio') return formats.some((f) => f.key === 'audio') ? 'audio' : null;
+    if (preset === 'best') return formats.some((f) => f.key === 'best') ? 'best' : null;
+    const limit = Number(preset);
+    const heights = formats.filter((f) => f.kind === 'video' && /^\d+$/.test(f.key)).map((f) => Number(f.key));
+    const fit = Math.max(0, ...heights.filter((h) => h <= limit));
+    return fit ? String(fit) : presetKey('best');
+  }
+
+  function renderPresets() {
+    const formats = state.video.data?.formats || [];
+    const active = els.videoQuality.value;
+    els.presetRow.replaceChildren();
+    if (formats.length < 2) return;
+    const label = document.createElement('span');
+    label.className = 'mr-1 text-[12px] font-semibold text-slate-700 dark:text-slate-300';
+    label.textContent = 'Quick choice';
+    els.presetRow.appendChild(label);
+    PRESETS.forEach(([preset, text]) => {
+      // A height chip only appears when this video really has that height.
+      const key = /^\d+$/.test(preset) ? (formats.some((f) => f.key === preset) ? preset : null) : presetKey(preset);
+      if (!key) return;
+      const on = key === active;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.textContent = text;
+      chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+      chip.className = 'rounded-full border px-3 py-1 text-[12px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ' + (on
+        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-400/10 dark:text-indigo-200'
+        : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5');
+      chip.addEventListener('click', () => {
+        pref.set('preset', preset);
+        els.videoQuality.value = key;
+        renderPresets();
+        updateFormatHint();
+      });
+      els.presetRow.appendChild(chip);
+    });
+  }
+
+  function renderSubtitles(subs) {
+    els.subsLang.replaceChildren();
+    subs.forEach((s) => {
+      const option = document.createElement('option');
+      option.value = s.code;
+      option.textContent = s.name === s.code ? s.code : `${s.name} (${s.code})`;
+      els.subsLang.appendChild(option);
+    });
+    const saved = pref.get('sublang', '');
+    const device = (navigator.language || 'en').toLowerCase();
+    const pick = subs.find((s) => s.code === saved)
+      || subs.find((s) => s.code.toLowerCase() === device)
+      || subs.find((s) => s.code.toLowerCase().split('-')[0] === device.split('-')[0])
+      || subs.find((s) => s.code.toLowerCase().startsWith('en'))
+      || subs[0];
+    if (pick) els.subsLang.value = pick.code;
+    els.subsCheck.checked = pref.get('subs', '0') === '1';
+    els.subsRow.dataset.has = subs.length ? '1' : '';
+  }
+
+  // Which subtitle language to embed, or null (no choice made, audio-only, or none offered).
+  function chosenSubtitles() {
+    const format = currentFormat();
+    if (!format || format.kind === 'audio' || els.subsRow.dataset.has !== '1' || !els.subsCheck.checked) return null;
+    return els.subsLang.value || null;
+  }
+
+  function notifyDone(title, body) {
+    if (pref.get('notify', '1') !== '1' || !('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!document.hidden && document.hasFocus()) return;   // the user is looking at the app already
+    try {
+      const n = new Notification(title, { body });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch (_) {}
+  }
+
+  function askNotifyPermission() {
+    if (pref.get('notify', '1') === '1' && 'Notification' in window && Notification.permission === 'default') {
+      try { Notification.requestPermission(); } catch (_) {}
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Download history (kept on this device only)
+  // ---------------------------------------------------------------------
+  const HISTORY_MAX = 50;
+
+  function readHistory() {
+    try {
+      const list = JSON.parse(pref.get('history', '[]'));
+      return Array.isArray(list) ? list : [];
+    } catch (_) { return []; }
+  }
+
+  function addHistory(entry) {
+    const list = readHistory().filter((item) => item.id !== entry.id);
+    list.unshift({ ...entry, ts: Date.now() });
+    pref.set('history', JSON.stringify(list.slice(0, HISTORY_MAX)));
+    renderHistory();
+  }
+
+  function timeAgo(ts) {
+    const s = Math.max(0, (Date.now() - ts) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+    return `${Math.floor(s / 86400)} d ago`;
+  }
+
+  function renderHistory() {
+    const list = readHistory();
+    els.historySection.hidden = list.length === 0;
+    els.historyCount.textContent = `History (${list.length})`;
+    els.historyList.replaceChildren();
+    list.forEach((item) => {
+      const row = document.createElement('li');
+      row.className = 'flex items-center gap-2 px-2 py-2.5';
+      const text = document.createElement('div');
+      text.className = 'min-w-0 flex-1';
+      const title = document.createElement('p');
+      title.className = 'truncate text-[13px] font-medium text-slate-800 dark:text-slate-100';
+      title.textContent = item.title || 'Untitled video';
+      title.title = item.title || '';
+      const meta = document.createElement('p');
+      meta.className = 'truncate text-[11.5px] text-slate-400 dark:text-slate-500';
+      meta.textContent = [item.label, shortenHost(item.url), timeAgo(item.ts)].filter(Boolean).join(' · ');
+      text.append(title, meta);
+
+      const again = document.createElement('button');
+      again.type = 'button';
+      again.textContent = 'Fetch again';
+      again.className = 'shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5';
+      again.addEventListener('click', () => {
+        els.videoUrl.value = item.url;
+        els.videoUrl.dispatchEvent(new Event('input', { bubbles: true }));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        els.videoForm.requestSubmit();
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', 'Remove from history');
+      remove.className = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white';
+      remove.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+      remove.addEventListener('click', () => {
+        pref.set('history', JSON.stringify(readHistory().filter((h) => h.id !== item.id)));
+        renderHistory();
+      });
+      row.append(text, again, remove);
+      els.historyList.appendChild(row);
+    });
+  }
+
   function updateFormatHint() {
     const format = currentFormat();
     if (!format) return;
+    renderPresets();
+    els.subsRow.hidden = format.kind === 'audio' || els.subsRow.dataset.has !== '1';
     if (format.size_bytes) {
       els.formatSize.textContent = `≈ ${formatBytes(format.size_bytes)}`;
     } else {
       els.formatSize.textContent = 'Size available on download';
     }
     els.formatDetail.textContent = format.kind === 'audio'
-      ? 'MP3 audio · 192 kbps · Converted with FFmpeg'
+      ? `${format.detail || 'Audio'} · Made with FFmpeg`
       : `${format.detail || 'Video'} · Merged at the best available quality`;
     const label = els.videoDownload.querySelector('[data-btn-label]');
     if (label && state.video.phase === 'ready') {
@@ -593,6 +779,9 @@
     if (state.video.phase !== 'ready' || !state.video.jobId) return;
     const jobId = state.video.jobId;
     const quality = els.videoQuality.value;
+    const subs = chosenSubtitles();
+    state.video.sent = { quality, subs, label: currentFormat()?.label || '' };
+    askNotifyPermission();
     state.video.terminal = false;
     setVideoPhase('downloading');
     updateVideoProgress({ stage: 'starting', percent: 0 });
@@ -602,7 +791,7 @@
     try {
       await api('/api/video/download', {
         method: 'POST',
-        body: { job_id: jobId, quality },
+        body: { job_id: jobId, quality, subs },
         timeout: 60000,
       });
       if (state.video.jobId !== jobId) return;
@@ -696,6 +885,15 @@
       state.video.autoDownloadedFor = state.video.jobId;
       triggerDownload(url);
       toast('Download complete — your file is ready.', 'success');
+      const video = state.video.data || {};
+      const sent = state.video.sent || {};
+      addHistory({
+        id: state.video.jobId,
+        title: video.title,
+        url: video.webpage_url || els.videoUrl.value.trim(),
+        label: [sent.label, sent.subs ? `subtitles: ${sent.subs}` : ''].filter(Boolean).join(' + '),
+      });
+      notifyDone('Download finished', name);
     }
   }
 
@@ -762,6 +960,15 @@
     els.videoRetry.addEventListener('click', () => els.videoForm.requestSubmit());
     els.videoDownload.addEventListener('click', startVideoDownload);
     els.videoQuality.addEventListener('change', updateFormatHint);
+    els.subsCheck.addEventListener('change', () => pref.set('subs', els.subsCheck.checked ? '1' : '0'));
+    els.subsLang.addEventListener('change', () => pref.set('sublang', els.subsLang.value));
+    els.notifyCheck.checked = pref.get('notify', '1') === '1';
+    els.notifyCheck.addEventListener('change', () => {
+      pref.set('notify', els.notifyCheck.checked ? '1' : '0');
+      askNotifyPermission();
+    });
+    els.historyClear.addEventListener('click', () => { pref.set('history', '[]'); renderHistory(); });
+    renderHistory();
     els.updateTools.addEventListener('click', updateTools);
 
     setVideoPhase('idle');
@@ -770,7 +977,13 @@
   }
 
   // Shared with static/playlist.js.
-  window.Fetchy = { api, toast, formatBytes, formatDuration, setVideoPhase, setButtonLoading, fetchButton: els.videoFetch };
+  // A finished playlist is recorded and announced like a single video (see playlist.js).
+  function playlistFinished(title, url, summary) {
+    addHistory({ id: `pl-${Date.now()}`, title, url, label: `Playlist · ${summary}` });
+    notifyDone('Playlist finished', `${title} — ${summary}`);
+  }
+
+  window.Fetchy = { api, toast, formatBytes, formatDuration, setVideoPhase, setButtonLoading, fetchButton: els.videoFetch, playlistFinished };
 
   init();
 })();

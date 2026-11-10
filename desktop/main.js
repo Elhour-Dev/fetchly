@@ -7,6 +7,8 @@ const fs = require('fs'), path = require('path'), net = require('net'), http = r
 // Keep the old data folder (login, settings) now that the app is named Fetchy.
 app.setPath('userData', path.join(app.getPath('appData'), 'Fetchly'));
 
+app.setAppUserModelId('app.fetchly.desktop');   // needed for Windows "download finished" notifications
+
 let server = null, win = null, logFile = null;
 
 const res = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'vendor');

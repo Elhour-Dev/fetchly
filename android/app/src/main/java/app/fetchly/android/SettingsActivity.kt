@@ -34,6 +34,15 @@ class SettingsActivity : ThemedActivity() {
         ap.add(row, 12)
         box.add(ap, 16)
 
+        val nt = card()
+        nt.addView(label("Notifications", 18f, bold = true))
+        nt.add(android.widget.CheckBox(this).apply {
+            text = "Notify me when a download is done"; textSize = 15f; setTextColor(col(R.color.text))
+            isChecked = Quality.notifyDone(this@SettingsActivity)
+            setOnCheckedChangeListener { _, on -> Quality.setNotifyDone(this@SettingsActivity, on) }
+        }, 6)
+        box.add(nt, 16)
+
         val ck = card()
         ck.addView(label("Cookies", 18f, bold = true))
         cookieInfo = label("", 14f, R.color.muted)

@@ -17,7 +17,10 @@ Fetchy is designed as a local, single-user utility. Paste a public video URL to 
 - Correct yt-dlp selectors:
   - Best: `bestvideo*+bestaudio/best`
   - Resolution: `bestvideo[height<=?720]+bestaudio/best[height<=?720]`
-  - Audio: `bestaudio/best` + MP3 conversion (192 kbps)
+  - Audio: `bestaudio/best` + MP3 conversion (192 kbps), or M4A (original AAC). Title and artist tags are added, plus cover art for MP3 (and for M4A when the optional `mutagen` package is installed).
+- Quick quality buttons (Best, 1080p, 720p, 480p, Audio) that remember your last choice.
+- Optional embedded subtitles: pick a language (`subs` in `POST /api/video/download`) and it is muxed into the MP4.
+- Download history on your device (web and desktop), with "Fetch again", and a "done" notification when you are in another window.
 - Live progress over **Server-Sent Events**: percentage, downloaded bytes, speed, ETA, and merge/post-processing stage.
 - Files saved with UUID names in `downloads/`, with friendly titles in the browser download.
 
