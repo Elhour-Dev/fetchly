@@ -12,14 +12,15 @@ function isNewer(latest, current) {
   return false;
 }
 
-// Returns { tag, url } or null (offline, rate limited, draft/prerelease...). fetchFn: fetch-like function.
+// Returns { tag, url, file } or null (offline, rate limited, draft/prerelease...). file: direct .exe link, or null. fetchFn: fetch-like function.
 async function latestRelease(fetchFn) {
   try {
     const r = await fetchFn(API, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Fetchy-Desktop' } });
     if (!r.ok) return null;
     const j = await r.json();
     if (j.draft || j.prerelease || !j.tag_name || !j.html_url) return null;
-    return { tag: j.tag_name, url: j.html_url, notes: String(j.body || '').trim() };
+    const exe = (j.assets || []).find(a => /\.exe$/i.test(a.name || '') && a.browser_download_url);
+    return { tag: j.tag_name, url: j.html_url, file: exe ? exe.browser_download_url : null, notes: String(j.body || '').trim() };
   } catch { return null; }
 }
 
@@ -30,10 +31,19 @@ async function checkForUpdate({ dialog, shell, net, win, version }) {
     if (!rel || !isNewer(rel.tag, version)) return;
     const { response } = await dialog.showMessageBox(win, {
       type: 'info', title: 'Fetchy', message: `New version ${rel.tag.replace(/^v/, '')}`,
-      detail: (rel.notes ? `What's new:\n${rel.notes.slice(0, 1200)}\n\n` : '') + 'Download opens the release page.',
+      detail: (rel.notes ? `What's new:\n${rel.notes.slice(0, 1200)}\n\n` : '') + (rel.file ? 'Download saves the installer to your Downloads folder.' : 'Download opens the release page.'),
       buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1,
     });
-    if (response === 0) shell.openExternal(rel.url);
+    if (response !== 0) return;
+    if (!rel.file) return shell.openExternal(rel.url);
+    // Download inside the app (main.js saves it to Downloads), then show the file.
+    win.webContents.session.once('will-download', (_e, item) => {
+      item.once('done', (_ev, state) => {
+        if (state === 'completed') shell.showItemInFolder(item.getSavePath());
+        else shell.openExternal(rel.url);
+      });
+    });
+    win.webContents.downloadURL(rel.file);
   } catch {}
 }
 

@@ -12,8 +12,8 @@ android {
         applicationId = "app.fetchly.android"
         minSdk = 29
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.2.1"
+        versionCode = 8
+        versionName = "1.2.2"
         ndk { abiFilters += "arm64-v8a" }   // phone only: arm64 (small APK)
     }
 

@@ -42,7 +42,6 @@ Fetchy is designed as a local, single-user utility. Paste a public video URL to 
 3. Windows may show "Protected your PC". Click **More info**, then **Run anyway**.
 4. Videos save to your Downloads folder. Use **Update tools** to get the newest yt-dlp.
 
-Check the download with the SHA256 value in the release notes (`Get-FileHash Fetchy-Setup-X.Y.Z.exe`).
 License notices (ffmpeg is GPL v3, yt-dlp is Unlicense): see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Download for Android
@@ -52,7 +51,7 @@ License notices (ffmpeg is GPL v3, yt-dlp is Unlicense): see [THIRD_PARTY_NOTICE
 3. Share a video link to Fetchy, or paste it in the app. Videos save to your Downloads folder.
 4. Login problems? The app shows a **Log in** button. If the site blocks that, use **Import cookies.txt**. Open **Help** in the app for steps.
 
-Check the download with the SHA256 value in the release notes. Needs Android 10 or newer and a 64-bit (arm64) phone.
+Needs Android 10 or newer and a 64-bit (arm64) phone.
 
 ## Requirements
 

@@ -16,7 +16,8 @@ import kotlin.concurrent.thread
 object AppUpdate {
     private const val API = "https://api.github.com/repos/Elhour-Dev/fetchly/releases/latest"
 
-    class Release(val tag: String, val url: String, val notes: String)
+    /** [apk]: direct .apk link, or null if the release has none. */
+    class Release(val tag: String, val url: String, val apk: String?, val notes: String)
 
     /** "v1.2.0" -> [1,2,0]. True when [latest] is higher than [current]. */
     fun isNewer(latest: String, current: String): Boolean {
@@ -40,7 +41,13 @@ object AppUpdate {
         body?.let {
             val j = org.json.JSONObject(it)
             if (j.optBoolean("draft") || j.optBoolean("prerelease")) null
-            else Release(j.getString("tag_name"), j.getString("html_url"), j.optString("body").trim())
+            else {
+                val assets = j.optJSONArray("assets")
+                val apk = (0 until (assets?.length() ?: 0)).map { assets!!.getJSONObject(it) }
+                    .firstOrNull { it.optString("name").endsWith(".apk", true) }
+                    ?.optString("browser_download_url")?.takeIf { u -> u.isNotEmpty() }
+                Release(j.getString("tag_name"), j.getString("html_url"), apk, j.optString("body").trim())
+            }
         }
     } catch (e: Exception) { null }
 
@@ -67,12 +74,12 @@ private fun Activity.showAppUpdateDialog(rel: AppUpdate.Release) {
         box.add(label("What's new", 15f, bold = true), 8)
         val scroll = android.widget.ScrollView(this).apply { addView(label(rel.notes, 14f, R.color.muted)) }
         box.add(scroll, 4, -1, dp(160))
-    } else box.add(label("A newer version of Fetchy is available. Download opens the release page.", 15f, R.color.muted), 8)
+    } else box.add(label("A newer version of Fetchy is available. Download saves the app to your Downloads.", 15f, R.color.muted), 8)
     box.add(buttons, 18)
     fun add(v: View, top: Int) = buttons.add(v, top, -1, dp(48))
     add(button("Download", Kind.PRIMARY) {
         dlg.dismiss()
-        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(rel.url))) } catch (e: Exception) { /* no browser */ }
+        if (!downloadApk(rel)) try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(rel.url))) } catch (e: Exception) { /* no browser */ }
     }, 0)
     add(button("Later", Kind.GHOST) { dlg.dismiss() }, 8)
     dlg.setContentView(box)
@@ -81,4 +88,20 @@ private fun Activity.showAppUpdateDialog(rel: AppUpdate.Release) {
     dlg.window?.setLayout(
         (resources.displayMetrics.widthPixels - dp(40)).coerceAtMost(dp(400)), ViewGroup.LayoutParams.WRAP_CONTENT
     )
+}
+
+/** Downloads the .apk with the system download manager (tap the notification to install). False if not possible. */
+private fun Activity.downloadApk(rel: AppUpdate.Release): Boolean {
+    val link = rel.apk ?: return false
+    return try {
+        val name = "Fetchy-${rel.tag.removePrefix("v")}.apk"
+        val req = android.app.DownloadManager.Request(Uri.parse(link))
+            .setTitle(name)
+            .setMimeType("application/vnd.android.package-archive")
+            .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
+        getSystemService(android.app.DownloadManager::class.java).enqueue(req)
+        android.widget.Toast.makeText(this, "Downloading $name…", android.widget.Toast.LENGTH_LONG).show()
+        true
+    } catch (e: Exception) { false }
 }

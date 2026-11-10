@@ -1,6 +1,6 @@
 ---
 name: release
-description: Publish a new Fetchy version (bump, commit, push, build, checksums, GitHub release). Usage /release X.Y.Z
+description: Prepare a new Fetchy version (bump, build, commit, push, hand files to the user). Usage /release X.Y.Z
 disable-model-invocation: true
 ---
 
@@ -15,9 +15,10 @@ Release Fetchy version $ARGUMENTS (format X.Y.Z). Follow CLAUDE.md. Main branch 
 4. Build:
    - Windows installer: `cd desktop && npm run dist` -> `desktop/dist/Fetchy-Setup-X.Y.Z.exe`
    - APK: `cd android && ./gradlew assembleRelease`
-5. Make `SHA256SUMS.txt` for the installer and the APK (`sha256sum` or `Get-FileHash`).
-6. Show the user: version, files, checksums. **Ask once** before publishing.
-7. After a yes: commit "Release X.Y.Z: <short summary>", `git push origin main`, then
-   `gh release create vX.Y.Z <installer> <apk> SHA256SUMS.txt --title "vX.Y.Z" --notes "<notes>"`
-   (use the user's proxy and gh login).
-8. Never include cookies, keys or personal files. Report the release URL.
+5. Show the user: version and files. **Ask once** before committing.
+6. After a yes: commit "Release X.Y.Z: <short summary>", then `git push origin main`.
+7. Do not create the GitHub release. Give the user:
+   - full paths to the installer (`desktop/dist/Fetchy-Setup-X.Y.Z.exe`) and the release APK (`android/app/build/outputs/apk/release/`)
+   - short release notes to paste
+   - reminders: tag `vX.Y.Z`, not draft or pre-release, keep the `.exe` and `.apk` endings (the in-app Update button needs them), no SHA256 sums.
+8. Never include cookies, keys or personal files.

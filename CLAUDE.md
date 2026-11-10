@@ -1,6 +1,6 @@
 # Fetchy workflow
 
-Work on main only, no new branches. After each finished update: bump the version, commit, push, create a GitHub release (tag vX.Y.Z) with the installer, the APK and SHA256 checksums, via my proxy and gh login. Ask me once before publishing. Never include cookies, keys or personal files. Never force-push.
+Work on main only, no new branches. After each finished update: bump the version, run the checks, build the installer and the APK, ask me once, then commit and push. Do not create the GitHub release: give me the file paths and short release notes, and I publish it myself (tag vX.Y.Z, not draft or pre-release, keep the .exe and .apk endings, no SHA256 sums). Never include cookies, keys or personal files. Never force-push.
 
 Version lives in `desktop/package.json` (`version`), `android/app/build.gradle.kts` (`versionName`, `versionCode`) and `fetchy/config.py` (`APP_VERSION`). Keep them equal to the tag.
 
