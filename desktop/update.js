@@ -1,8 +1,5 @@
 // Checks GitHub for a newer app version. Failures are silent: the app never waits for or depends on this.
-const fs = require('fs'), path = require('path');
-
 const API = 'https://api.github.com/repos/Elhour-Dev/fetchly/releases/latest';
-const DAY = 24 * 60 * 60 * 1000;
 
 // "v1.2.0" vs "1.0.0": true when latest is higher than current.
 function isNewer(latest, current) {
@@ -22,29 +19,18 @@ async function latestRelease(fetchFn) {
     if (!r.ok) return null;
     const j = await r.json();
     if (j.draft || j.prerelease || !j.tag_name || !j.html_url) return null;
-    return { tag: j.tag_name, url: j.html_url };
+    return { tag: j.tag_name, url: j.html_url, notes: String(j.body || '').trim() };
   } catch { return null; }
 }
 
-// At most one check per day: remember when we last asked GitHub (even if it failed).
-function dueToday(file) {
-  try { return Date.now() - JSON.parse(fs.readFileSync(file, 'utf8')).last >= DAY; } catch { return true; }
-}
-function markChecked(file) {
-  try { fs.writeFileSync(file, JSON.stringify({ last: Date.now() })); } catch {}
-}
-
-// Shows the pop-up when a newer version exists. Call after the window is up; never throws, never installs.
-async function checkForUpdate({ dialog, shell, net, win, version, dataDir }) {
+// Shows the pop-up on every start while a newer version exists. Call after the window is up; never throws, never installs.
+async function checkForUpdate({ dialog, shell, net, win, version }) {
   try {
-    const file = path.join(dataDir, 'update-check.json');
-    if (!dueToday(file)) return;
-    markChecked(file);
     const rel = await latestRelease((u, o) => net.fetch(u, o));
     if (!rel || !isNewer(rel.tag, version)) return;
     const { response } = await dialog.showMessageBox(win, {
       type: 'info', title: 'Fetchy', message: `New version ${rel.tag.replace(/^v/, '')}`,
-      detail: 'A newer version of Fetchy is available. Download opens the release page.',
+      detail: (rel.notes ? `What's new:\n${rel.notes.slice(0, 1200)}\n\n` : '') + 'Download opens the release page.',
       buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1,
     });
     if (response === 0) shell.openExternal(rel.url);

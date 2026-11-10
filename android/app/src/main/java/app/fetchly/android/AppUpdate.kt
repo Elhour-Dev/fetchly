@@ -2,7 +2,6 @@ package app.fetchly.android
 
 import android.app.Activity
 import android.app.Dialog
-import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -16,9 +15,8 @@ import kotlin.concurrent.thread
 /** Checks GitHub for a newer app version and offers the download link. Never blocks the app. */
 object AppUpdate {
     private const val API = "https://api.github.com/repos/Elhour-Dev/fetchly/releases/latest"
-    private const val DAY = 24L * 60 * 60 * 1000
 
-    class Release(val tag: String, val url: String)
+    class Release(val tag: String, val url: String, val notes: String)
 
     /** "v1.2.0" -> [1,2,0]. True when [latest] is higher than [current]. */
     fun isNewer(latest: String, current: String): Boolean {
@@ -42,24 +40,14 @@ object AppUpdate {
         body?.let {
             val j = org.json.JSONObject(it)
             if (j.optBoolean("draft") || j.optBoolean("prerelease")) null
-            else Release(j.getString("tag_name"), j.getString("html_url"))
+            else Release(j.getString("tag_name"), j.getString("html_url"), j.optString("body").trim())
         }
     } catch (e: Exception) { null }
 
-    private fun prefs(ctx: Context) = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-    /** True at most once a day: remembers when GitHub was last asked (even if the answer failed). */
-    fun dueToday(ctx: Context): Boolean {
-        val p = prefs(ctx)
-        val now = System.currentTimeMillis()
-        if (now - p.getLong("app_update_last_check", 0L) < DAY) return false
-        p.edit().putLong("app_update_last_check", now).apply()
-        return true
-    }
 }
 
-/** At startup, at most once a day: if a newer release exists, show a pop-up. Silent on any failure. Never installs. */
+/** At every startup: if a newer release exists, show a pop-up. Silent on any failure. Never installs. */
 fun Activity.checkAppUpdate() {
-    if (!AppUpdate.dueToday(this)) return
     thread {
         val rel = AppUpdate.latest() ?: return@thread
         val current = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "0" } catch (e: Exception) { "0" }
@@ -75,7 +63,11 @@ private fun Activity.showAppUpdateDialog(rel: AppUpdate.Release) {
     val box = card(pad = 20)
     val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     box.addView(label("New version ${rel.tag.removePrefix("v")}", 20f, bold = true))
-    box.add(label("A newer version of Fetchy is available. Download opens the release page.", 15f, R.color.muted), 8)
+    if (rel.notes.isNotEmpty()) {
+        box.add(label("What's new", 15f, bold = true), 8)
+        val scroll = android.widget.ScrollView(this).apply { addView(label(rel.notes, 14f, R.color.muted)) }
+        box.add(scroll, 4, -1, dp(160))
+    } else box.add(label("A newer version of Fetchy is available. Download opens the release page.", 15f, R.color.muted), 8)
     box.add(buttons, 18)
     fun add(v: View, top: Int) = buttons.add(v, top, -1, dp(48))
     add(button("Download", Kind.PRIMARY) {
