@@ -49,8 +49,11 @@ class MainActivity : ThemedActivity() {
     private var loadedLink: String? = null
     private var loading = false
     private var failed = false
+    private var failWhy = ""   // short reason the qualities could not be loaded (from the help topics)
     private var loadSeq = 0
     private var wasRunning = false
+    private var slow = false   // the quality check is taking long: offer the Download button anyway
+    private val slowTimer = Runnable { slow = true; renderQuality() }
     private val loader = Runnable { loadQualities() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -243,8 +246,9 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun cancelLoad() {
-        url.removeCallbacks(loader)
+        url.removeCallbacks(loader); url.removeCallbacks(slowTimer); slow = false
         try { YoutubeDL.getInstance().destroyProcessById("formats-$loadSeq") } catch (_: Exception) {}
+        if (loading) loadedLink = null   // an unfinished check does not count: it runs again after the download
         loadSeq++; loading = false
     }
 
@@ -258,16 +262,20 @@ class MainActivity : ThemedActivity() {
         options = null; subs = emptyList(); failed = false; loading = true
         if (!ready) { renderQuality(); return }   // starts again when the tools are ready
         loadedLink = link
+        url.postDelayed(slowTimer, 40_000)
         renderQuality()
         val seq = loadSeq
         thread {
-            val res: Loaded? = try { Quality.fetch(this, link, "formats-$seq") } catch (e: Exception) { null }
+            var why = ""
+            val res: Loaded? = try { Quality.fetch(this, link, "formats-$seq") } catch (e: Exception) {
+                why = Help.find((e.message ?: e.toString()).trim(), link)?.simple.orEmpty(); null }
             runOnUiThread {
                 if (seq != loadSeq) return@runOnUiThread
-                loading = false
+                loading = false; slow = false; url.removeCallbacks(slowTimer)
                 options = res?.options?.takeIf { it.isNotEmpty() }
                 subs = if (options != null) res?.subs.orEmpty() else emptyList()
                 failed = options == null
+                failWhy = if (failed) why else ""
                 val want = Quality.remembered(this)
                 selected = if (options?.any { it.key == want } == true) want else "best"
                 renderQuality()
@@ -282,11 +290,12 @@ class MainActivity : ThemedActivity() {
         // downloads the best quality. A playlist-only link gets it at once: the playlist screen has its own choice.
         val link = urlRegex.find(url.text.toString())?.value
         val listOnly = link != null && Pl.isList(link) && !Pl.hasVideo(link)
-        show(download, options != null || failed || listOnly)
+        show(download, options != null || failed || listOnly || (loading && slow))
         qList.removeAllViews()
         qNote.text = when {
-            loading -> if (ready) "Checking what this video offers…" else "Getting ready…"
-            failed -> "Could not load the qualities. Fetchy will download the best quality."
+            loading -> if (!ready) "Getting ready…" else if (slow) "Still checking… this is taking long. You can tap Download to get the best quality now."
+                else "Checking what this video offers…"
+            failed -> (if (failWhy.isNotEmpty()) failWhy else "Could not load the qualities.") + " Tap Download to try the best quality anyway."
             else -> ""
         }
         show(qNote, qNote.text.isNotEmpty())
