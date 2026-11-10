@@ -19,6 +19,6 @@ Release Fetchy version $ARGUMENTS (format X.Y.Z). Follow CLAUDE.md. Main branch 
 6. After a yes: commit "Release X.Y.Z: <short summary>", then `git push origin main`.
 7. Do not create the GitHub release. Give the user:
    - full paths to the installer (`desktop/dist/Fetchy-Setup-X.Y.Z.exe`) and the release APK (`android/app/build/outputs/apk/release/`)
-   - short release notes to paste
+   - release notes, always, in one code block ready to paste: short bullet points in plain words for app users (they show under "What's new" in the in-app update pop-up)
    - reminders: tag `vX.Y.Z`, not draft or pre-release, keep the `.exe` and `.apk` endings (the in-app Update button needs them), no SHA256 sums.
 8. Never include cookies, keys or personal files.
