@@ -9,14 +9,38 @@ import com.yausername.youtubedl_android.YoutubeDLRequest
 
 /** Shared state between the screen and the download service. Never holds cookie contents. */
 object State {
-    enum class Phase { IDLE, RUNNING, DONE, ERROR }
-
     /** Steps of one download, same idea as the desktop app. */
     enum class Stage(val failedAt: String) { FETCH("fetching video info"), DOWNLOAD("downloading"), FINISH("finishing (merging video and audio)") }
 
-    @Volatile var phase = Phase.IDLE
-    @Volatile var stage = Stage.FETCH
-    @Volatile var failedStage: Stage? = null
+    /** The downloads shown on the main page, newest first. */
+    val dls = java.util.concurrent.CopyOnWriteArrayList<Dl>()
+    private val ids = java.util.concurrent.atomic.AtomicInteger()
+    fun nextId() = ids.incrementAndGet()
+    /** True while a download runs or waits. */
+    fun busy() = dls.any { it.active }
+
+    @Volatile var cookiesSaved = false   // true after a login or import; error cards then offer "Retry"
+    @Volatile var loginFor = 0           // the download whose "Log in" was tapped
+    @Volatile var startupChecked = false // the "tools are old" check runs once per app start
+    @Volatile var appUpdateChecked = false // the start screen (app update check) shows once per app start
+    @Volatile var listener: (() -> Unit)? = null
+
+    private val main = Handler(Looper.getMainLooper())
+    fun changed() { main.post { listener?.invoke() } }
+}
+
+/** One download: what to get, and how far it is. The service fills it in; the main page shows one card for it. */
+class Dl(
+    val id: Int, val url: String, val format: String = Quality.BEST, val audio: Boolean = false, val codec: String = "mp3",
+    val label: String = "", val subs: String? = null, val subsAuto: Boolean = false,
+    val info: java.io.File? = null,   // the video info saved by the quality picker (null = ask the site again)
+    val name: String = "",            // video title, when known
+) {
+    enum class Phase { QUEUED, RUNNING, DONE, ERROR }
+
+    @Volatile var phase = Phase.QUEUED
+    @Volatile var stage = State.Stage.FETCH
+    @Volatile var failedStage: State.Stage? = null
     @Volatile var percent = 0
     @Volatile var text = ""
     @Volatile var item = ""              // "Video 2 of 10 · " while a playlist downloads
@@ -24,15 +48,20 @@ object State {
     @Volatile var errorDetails = ""
     @Volatile var helpTopic: String? = null
     @Volatile var needsLogin = false
-    @Volatile var failedUrl = ""
     @Volatile var sessionCode = 0        // HTTP status of the Instagram login check after a failure (0 = not checked)
-    @Volatile var cookiesSaved = false   // true after a login or import; the error card then offers "Retry"
-    @Volatile var updateOffered = false  // the update pop-up was already shown for the current error
-    @Volatile var startupChecked = false // the "tools are old" check runs once per app start
-    @Volatile var listener: (() -> Unit)? = null
+    @Volatile var updateOffered = false  // the update pop-up was already shown for this error
+    @Volatile var cancelled = false
+    val active get() = phase == Phase.QUEUED || phase == Phase.RUNNING
 
-    private val main = Handler(Looper.getMainLooper())
-    fun changed() { main.post { listener?.invoke() } }
+    /** A copy to try again (asks the site again, so an old saved answer is not reused). */
+    fun again() = Dl(State.nextId(), url, format, audio, codec, label, subs, subsAuto, null, name)
+
+    companion object {
+        /** A problem that is not a download (no link shared, tools did not start): shown as an error card. */
+        fun problem(short: String, details: String = "", topic: String? = null) = Dl(State.nextId(), "").apply {
+            phase = Phase.ERROR; errorShort = short; errorDetails = details; helpTopic = topic
+        }
+    }
 }
 
 object Tools {
@@ -120,6 +149,19 @@ object Tools {
  * Cookies for yt-dlp live in one private file (app storage, no backup). Contents are never logged,
  * shown, exported or sent anywhere except to yt-dlp itself.
  */
+/** Sites Fetchy cannot download from: the app says so at once (same text as the Windows app). */
+object Links {
+    fun unsupported(link: String): String? {
+        val uri = try { android.net.Uri.parse(link.trim()) } catch (_: Exception) { return null }
+        val host = (uri.host ?: "").lowercase().trimEnd('.')
+        fun on(site: String) = host == site || host.endsWith(".$site")
+        if (on("snapchat.com")) return "Not supported: Snapchat links can't be downloaded with Fetchy."
+        if (on("instagram.com") && Regex("^/(stories|s)/", RegexOption.IGNORE_CASE).containsMatchIn(uri.path ?: ""))
+            return "Not supported: Instagram stories can't be downloaded with Fetchy."
+        return null
+    }
+}
+
 object Cookies {
     private const val HEADER = "# Netscape HTTP Cookie File"
 

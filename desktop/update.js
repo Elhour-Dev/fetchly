@@ -1,4 +1,4 @@
-// Checks GitHub for a newer app version. Failures are silent: the app never waits for or depends on this.
+// Checks GitHub for a newer app version. Failures are silent: the start screen just goes on to the app.
 const API = 'https://api.github.com/repos/Elhour-Dev/fetchly/releases/latest';
 
 // "v1.2.0" vs "1.0.0": true when latest is higher than current.
@@ -24,27 +24,11 @@ async function latestRelease(fetchFn) {
   } catch { return null; }
 }
 
-// Shows the pop-up on every start while a newer version exists. Call after the window is up; never throws, never installs.
-async function checkForUpdate({ dialog, shell, net, win, version }) {
-  try {
-    const rel = await latestRelease((u, o) => net.fetch(u, o));
-    if (!rel || !isNewer(rel.tag, version)) return;
-    const { response } = await dialog.showMessageBox(win, {
-      type: 'info', title: 'Fetchy', message: `New version ${rel.tag.replace(/^v/, '')}`,
-      detail: (rel.notes ? `What's new:\n${rel.notes.slice(0, 1200)}\n\n` : '') + (rel.file ? 'Download saves the installer to your Downloads folder.' : 'Download opens the release page.'),
-      buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1,
-    });
-    if (response !== 0) return;
-    if (!rel.file) return shell.openExternal(rel.url);
-    // Download inside the app (main.js saves it to Downloads), then show the file.
-    win.webContents.session.once('will-download', (_e, item) => {
-      item.once('done', (_ev, state) => {
-        if (state === 'completed') shell.showItemInFolder(item.getSavePath());
-        else shell.openExternal(rel.url);
-      });
-    });
-    win.webContents.downloadURL(rel.file);
-  } catch {}
+// Newest release when it is newer than [version], else null. Gives up after [ms] (slow or no network): never throws.
+async function findUpdate(fetchFn, version, ms = 6000) {
+  const timer = new Promise(ok => setTimeout(() => ok(null), ms));
+  const rel = await Promise.race([latestRelease(fetchFn), timer]);
+  return rel && isNewer(rel.tag, version) ? rel : null;
 }
 
-module.exports = { isNewer, latestRelease, checkForUpdate };
+module.exports = { isNewer, latestRelease, findUpdate };

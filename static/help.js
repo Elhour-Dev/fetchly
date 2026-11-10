@@ -1,157 +1,105 @@
 /* Fetchy Help guide. Plain JS, no libraries, works offline.
-   Three expandable cards (Instagram, YouTube, General problems). Each problem says
-   what you see, why it happens, and how to fix it. Same content and structure as the mobile app.
-   Also adds: Help button, "How to fix" links, "Copy error details", and the Cookies box. */
+   One section per topic, each with short numbered steps: "How to" first, then "Fix a problem".
+   Same content and structure as the mobile app.
+   Also adds: Help button, "How to fix" links, "Copy error details", the Cookies box (in the login section),
+   and the one-time "Log in to YouTube first?" question. */
 (function () {
   'use strict';
 
-  var TIP = "Use a secondary account, not your main one. It's safer for your main account if the site flags the login. " +
-    "It lowers the risk, it doesn't remove it.";
+  var TIP = 'Tip: use a second account, not your main one. It is safer if the site flags the login.';
   var COOKIE_NOTE = 'Cookies are like a password. Never share them.';
 
-  // One problem: id, title, see (what you see), why, fix (2-4 steps), match (regex on the error text).
-  var CARDS = [
+  // "How to" sections: short steps, and a note under them. The login section also holds the Cookies box.
+  var GUIDES = [
     {
-      id: 'instagram', title: 'Instagram', subtitle: 'Login required, empty result, private post', tip: true,
-      problems: [
-        {
-          id: 'ig_login', title: 'Login required',
-          match: /log ?in|sign ?in|login required|authenticat|cookies|rate-limit|requires an account|members?[- ]only|need to log/i,
-          see: '"Login required", "Instagram needs a login" or "rate-limit reached". Other sites can say the same.',
-          why: 'The site only shows this to logged-in people.',
-          fix: [
-            'Log in to the site in Firefox on this computer.',
-            'Scroll down to "Cookies" in this guide. Pick Firefox and press "Use browser cookies".',
-            'Press "Try again".',
-            'No luck? Export a cookies.txt file from your browser and press "Upload cookies.txt".'
-          ]
-        },
-        {
-          id: 'ig_empty', title: 'Empty result',
-          match: /empty media response|no video in this post|there is no video/i,
-          see: '"Empty media response", or no video found in a post.',
-          why: 'You are probably not logged in, or the post has only photos.',
-          fix: [
-            'Log in in Firefox, then press "Use browser cookies" (see "Cookies" below).',
-            'Check that the post is a video or a Reel.',
-            'Wait a few minutes and try again.'
-          ]
-        },
-        {
-          id: 'ig_private', title: 'Private or deleted post',
-          match: /private|deleted|removed|no longer available|content is not available/i,
-          see: '"This content is not available", "private" or "deleted".',
-          why: 'The owner made it private or deleted it.',
-          fix: [
-            'Open the link in your browser. If you cannot see it there, Fetchy cannot either.',
-            'Private: log in in Firefox with an account that may see it, press "Use browser cookies", then try again.',
-            'Deleted: it is gone for good.'
-          ]
-        }
-      ]
+      id: 'download', title: 'Download a video',
+      steps: ['Copy the video link from your browser\'s address bar.', 'Click Paste in Fetchy.', 'Pick a quality.', 'Click "Download video".'],
+      note: 'The file goes to your Downloads folder.'
     },
     {
-      id: 'youtube', title: 'YouTube', subtitle: 'Bot check, video unavailable', tip: true,
-      problems: [
-        {
-          id: 'yt_bot', title: '"Sign in to confirm you\'re not a bot"',
-          match: /not a bot|confirm you.?re not/i,
-          see: 'YouTube asks you to sign in to prove you are not a bot.',
-          why: 'YouTube blocks requests it does not trust. VPNs and busy networks make it worse.',
-          fix: [
-            'If a VPN or proxy is on, turn it off.',
-            'Log in to YouTube in Firefox. Then press "Use browser cookies" (see "Cookies" below).',
-            'Chrome on Windows often fails to share cookies. Firefox usually works. Or upload a cookies.txt file.',
-            'Press "Update tools", then "Try again".'
-          ]
-        },
-        {
-          id: 'yt_unavail', title: 'Video unavailable',
-          match: /video unavailable|age[- ]restrict|confirm your age|inappropriate|has been terminated|country|geo[- ]?(restrict|block)|your region|not available in your|blocked it in your/i,
-          see: '"Video unavailable", "Private video" or "not available in your country".',
-          why: 'The owner hid or removed it, it is blocked where you are, or it needs a logged-in adult.',
-          fix: [
-            'Open the link in your browser. If it does not play there, Fetchy cannot get it.',
-            'Age limit: log in in Firefox with an adult account, press "Use browser cookies", then try again.',
-            'Blocked in your country: a VPN may help, but it can also trigger the bot check.',
-            'Removed or private: only the owner can fix that.'
-          ]
-        }
-      ]
+      id: 'playlist', title: 'Download a playlist',
+      steps: ['Paste a playlist link.', 'Tick the videos you want.', 'Pick one quality, then click Download.', 'If some fail, click "Retry failed" at the end.'],
+      note: 'Each playlist gets its own folder in Downloads. Videos you already have are skipped.'
     },
     {
-      id: 'general', title: 'General problems', subtitle: 'Sound, speed, links, tools, files', tip: false,
-      problems: [
-        {
-          id: 'g_unsupported', title: 'Link not supported',
-          match: /unsupported url|aren.t allowed|private network|local and private|not supported|no video|videos only|could not find|no media|not a valid|invalid url|no supported/i,
-          see: '"Unsupported URL" or "No video found".',
-          why: 'The link is not a video page, is cut off, or the site is not supported.',
-          fix: [
-            'Copy the link of the video itself from the address bar.',
-            'Paste the whole link. It starts with https://',
-            'Photos do not work. Fetchy downloads videos.',
-            'Press "Update tools", then try again.'
-          ]
-        },
-        {
-          id: 'g_ffmpeg', title: 'No sound, or ffmpeg missing',
-          match: /ffmpeg|ffprobe|postprocess|merg(e|ing)|no audio|no sound/i,
-          see: 'The video has no sound, or an error names ffmpeg.',
-          why: 'Many sites keep video and sound apart. Fetchy joins them with ffmpeg.',
-          fix: [
-            'Press "Try again".',
-            'Free some space on your disk.',
-            'Press "Update tools".',
-            'Still broken? Install Fetchy again with the latest installer.'
-          ]
-        },
-        {
-          id: 'g_network', title: 'Slow or failed download',
-          match: /timed out|timeout|too long|connection|proxy|ssl|certificate|network|failed to fetch|unreachable|429|too many requests|temporar|resolve/i,
-          see: 'The download is very slow, stops, times out, or says "too many requests" (429).',
-          why: 'Weak connection, a VPN, or the site is limiting you.',
-          fix: [
-            'Check that the internet works in your browser.',
-            'Turn off VPN or proxy, then press "Try again".',
-            '"Too many requests": wait a few minutes.',
-            'Try another network.'
-          ]
-        },
-        {
-          id: 'g_update', title: 'Outdated tools',
-          match: /unable to extract|update yt-dlp|outdated|nsig|signature|extractor error|please report this issue|sabr|player response/i,
-          see: '"Unable to extract" or "please update yt-dlp".',
-          why: 'Sites change often. Old tools stop working.',
-          fix: [
-            'Press "Update tools" at the bottom of the page.',
-            'Wait until it finishes.',
-            'Press "Try again". If the update fails, the old version keeps working.'
-          ]
-        },
-        {
-          id: 'g_format', title: '"Format not available"',
-          match: /format.{0,20}(is )?not available|requested format|no such format|no formats/i,
-          see: '"Requested format is not available".',
-          why: 'The site gave no video and sound mix that Fetchy can use. Often it needs a login.',
-          fix: [
-            'Pick another quality, or "Best quality".',
-            'Press "Update tools".',
-            'Log in or use cookies (see the Instagram or YouTube card).',
-            'Press "Try again".'
-          ]
-        },
-        {
-          id: 'g_storage', title: 'File not found in Downloads', match: null,
-          see: 'The download finished, but you cannot find the video.',
-          why: 'Fetchy saves finished videos in your Downloads folder.',
-          fix: [
-            'Open File Explorer and go to Downloads.',
-            'Sort by date, newest first.',
-            'A name that already exists gets a number, like "video (1).mp4".'
-          ]
-        }
-      ]
+      id: 'login', title: 'Log in to YouTube or Instagram', cookies: true,
+      steps: ['Log in to the site in Firefox on this computer.', 'Below, pick Firefox and click "Use browser cookies".', 'Paste the link again, or click "Try again".'],
+      note: 'Chrome and Edge often cannot share their cookies. Firefox works best. You can also upload a cookies.txt file. ' + TIP + ' ' + COOKIE_NOTE
+    },
+    {
+      id: 'find', title: 'Find your videos',
+      steps: ['Open File Explorer.', 'Go to Downloads.', 'Sort by date, newest first.'],
+      note: 'A name that already exists gets a number, like "video (1).mp4".'
+    },
+    {
+      id: 'tools', title: 'Keep downloads working',
+      steps: ['Click "Update tools" at the bottom of the page.', 'Wait until it finishes.', 'Try the link again.'],
+      note: 'Sites change often. Updating the tools fixes most new errors.'
+    }
+  ];
+
+  // One problem, one section: the title is what you see, why is one plain sentence, fix are short steps.
+  // match: regex on the error text (picks the "How to fix" link).
+  var PROBLEMS = [
+    {
+      id: 'yt_bot', title: 'YouTube: "Sign in to confirm you\'re not a bot"',
+      match: /not a bot|confirm you.?re not/i,
+      why: 'YouTube does not trust the connection. A VPN makes it worse.',
+      fix: ['Turn off any VPN or proxy.', 'Log in to YouTube in Firefox, then use browser cookies (see "Log in to YouTube or Instagram").', 'Click "Update tools", then "Try again".']
+    },
+    {
+      id: 'yt_unavail', title: 'YouTube: "Video unavailable"',
+      match: /video unavailable|age[- ]restrict|confirm your age|inappropriate|has been terminated|country|geo[- ]?(restrict|block)|your region|not available in your|blocked it in your/i,
+      why: 'The video is private, removed, blocked where you are, or for adults only.',
+      fix: ['Open the link in your browser. If it does not play there, Fetchy cannot get it.', 'For adults only: log in with an adult account and use browser cookies, then try again.', 'Removed or private: only the owner can fix that.']
+    },
+    {
+      id: 'ig_login', title: '"Login required"',
+      match: /log ?in|sign ?in|login required|authenticat|cookies|rate-limit|requires an account|members?[- ]only|need to log/i,
+      why: 'The site only shows this to people who are logged in.',
+      fix: ['Log in to the site in Firefox.', 'Use browser cookies (see "Log in to YouTube or Instagram").', 'Click "Try again".']
+    },
+    {
+      id: 'ig_empty', title: 'Instagram: empty result',
+      match: /empty media response|no video in this post|there is no video/i,
+      why: 'You are not logged in, or the post has only photos.',
+      fix: ['Log in and use browser cookies, then try again.', 'Check that the post is a video or a Reel.', 'Wait a few minutes, then try again.']
+    },
+    {
+      id: 'ig_private', title: 'Private or deleted post',
+      match: /private|deleted|removed|no longer available|content is not available/i,
+      why: 'The owner made it private or deleted it.',
+      fix: ['Open the link in your browser. If you cannot see it, Fetchy cannot either.', 'Private: log in with an account that can see it, use browser cookies, then try again.', 'Deleted: it is gone for good.']
+    },
+    {
+      id: 'g_unsupported', title: 'Link not supported',
+      match: /unsupported url|aren.t allowed|private network|local and private|not supported|no video|videos only|could not find|no media|not a valid|invalid url|no supported/i,
+      why: 'The link is not a video page, is cut off, or the site is not supported.',
+      fix: ['Copy the link of the video itself from the address bar.', 'Paste the whole link. It starts with https://', 'Photos do not work. Fetchy downloads videos.']
+    },
+    {
+      id: 'g_ffmpeg', title: 'No sound',
+      match: /ffmpeg|ffprobe|postprocess|merg(e|ing)|no audio|no sound/i,
+      why: 'Sites often send video and sound apart, and joining them failed.',
+      fix: ['Click "Try again".', 'Free some disk space.', 'Click "Update tools".', 'Still broken? Install the latest Fetchy.']
+    },
+    {
+      id: 'g_network', title: 'Slow or failed download',
+      match: /timed out|timeout|too long|connection|proxy|ssl|certificate|network|failed to fetch|unreachable|429|too many requests|temporar|resolve/i,
+      why: 'Weak connection, a VPN, or the site is limiting you.',
+      fix: ['Check that the internet works in your browser.', 'Turn off VPN or proxy.', 'Wait a few minutes, then click "Try again".', 'Try another network.']
+    },
+    {
+      id: 'g_update', title: '"Unable to extract" or "update yt-dlp"',
+      match: /unable to extract|update yt-dlp|outdated|nsig|signature|extractor error|please report this issue|sabr|player response/i,
+      why: 'The site changed, and the tools need an update.',
+      fix: ['Click "Update tools" at the bottom of the page.', 'Wait until it finishes.', 'Click "Try again".']
+    },
+    {
+      id: 'g_format', title: '"Format not available"',
+      match: /format.{0,20}(is )?not available|requested format|no such format|no formats/i,
+      why: 'The site gave no format Fetchy can use. Often it needs a login.',
+      fix: ['Pick another quality, or the best one.', 'Click "Update tools".', 'Log in (see "Log in to YouTube or Instagram").', 'Click "Try again".']
     }
   ];
 
@@ -159,8 +107,7 @@
   var ORDER = ['yt_bot', 'g_format', 'g_ffmpeg', 'yt_unavail', 'g_unsupported', 'ig_private', 'ig_empty', 'ig_login', 'g_update', 'g_network'];
 
   function problemById(id) {
-    for (var c = 0; c < CARDS.length; c++) for (var p = 0; p < CARDS[c].problems.length; p++)
-      if (CARDS[c].problems[p].id === id) return CARDS[c].problems[p];
+    for (var i = 0; i < PROBLEMS.length; i++) if (PROBLEMS[i].id === id) return PROBLEMS[i];
     return null;
   }
 
@@ -174,10 +121,14 @@
 
   // Look: same palette as the app (slate neutrals, indigo accent, rounded cards). Dark mode follows the app's "dark" class.
   var css = '' +
-    '#fhOverlay,#helpButton{--bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--accent:#4f46e5;--tonal:#eef2ff;--tonalText:#4338ca;--tipBg:#fffbeb;--tipBorder:#fde68a;--tipText:#92400e}' +
-    '#fhOverlay{position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:16px;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}' +
-    'html.dark #fhOverlay,html.dark #helpButton{--bg:#080b14;--card:rgba(255,255,255,.04);--border:rgba(255,255,255,.1);--text:#f1f5f9;--muted:#94a3b8;--accent:#818cf8;--tonal:rgba(99,102,241,.15);--tonalText:#c7d2fe;--tipBg:rgba(245,158,11,.1);--tipBorder:rgba(245,158,11,.25);--tipText:#fcd34d}' +
-    '#fhOverlay.open{display:flex}' +
+    '#fhOverlay,#fhAsk,#helpButton{--bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--accent:#4f46e5;--tonal:#eef2ff;--tonalText:#4338ca;--tipBg:#fffbeb;--tipBorder:#fde68a;--tipText:#92400e}' +
+    '#fhOverlay,#fhAsk{position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:16px;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}' +
+    'html.dark #fhOverlay,html.dark #fhAsk,html.dark #helpButton{--bg:#080b14;--card:rgba(255,255,255,.04);--border:rgba(255,255,255,.1);--text:#f1f5f9;--muted:#94a3b8;--accent:#818cf8;--tonal:rgba(99,102,241,.15);--tonalText:#c7d2fe;--tipBg:rgba(245,158,11,.1);--tipBorder:rgba(245,158,11,.25);--tipText:#fcd34d}' +
+    '#fhOverlay.open,#fhAsk.open{display:flex}' +
+    '#fhAsk{z-index:110}' +
+    '.fhAskBox{background:var(--bg);color:var(--text);max-width:420px;width:100%;border-radius:20px;border:1px solid var(--border);box-shadow:0 28px 70px -24px rgba(15,23,42,.5);padding:22px;font-size:14.5px;line-height:1.55}' +
+    '.fhAskBox h2{margin:0;font-size:19px;font-weight:700}.fhAskBox p{margin:8px 0 0;color:var(--muted)}' +
+    '.fhAskBox .fhFoot{margin-top:18px}.fhAskBox .fhBtn{padding:9px 16px}' +
     '#fhBox{background:var(--bg);color:var(--text);max-width:720px;width:100%;max-height:92vh;overflow-y:auto;overflow-x:hidden;border-radius:20px;border:1px solid var(--border);box-shadow:0 28px 70px -24px rgba(15,23,42,.5);font-size:14.5px;line-height:1.55}' +
     '#fhBox *{box-sizing:border-box}' +
     '.fhHead{position:sticky;top:0;z-index:1;display:flex;align-items:flex-start;gap:12px;padding:20px 20px 14px;background:var(--bg);border-bottom:1px solid var(--border)}' +
@@ -185,35 +136,31 @@
     '.fhHead p{margin:4px 0 0;color:var(--muted);font-size:13.5px}' +
     '.fhX{margin-left:auto;flex:none;width:36px;height:36px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}' +
     '.fhX:hover{color:var(--text)}' +
-    '.fhBody{padding:16px 20px 20px;display:flex;flex-direction:column;gap:12px}' +
-    '.fhNote{margin:0;font-weight:600;font-size:13.5px}' +
+    '.fhBody{padding:16px 20px 20px;display:flex;flex-direction:column;gap:8px}' +
+    '.fhGroup{margin:10px 0 2px;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}' +
+    '.fhGroup:first-child{margin-top:0}' +
     '.fhCard{border:1px solid var(--border);border-radius:16px;background:var(--card);overflow:hidden}' +
+    '.fhCard{scroll-margin-top:96px}' +
     '.fhCard.open{border-color:var(--accent)}' +
-    '.fhCardHead{width:100%;display:flex;align-items:center;gap:12px;padding:16px;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}' +
-    '.fhCardHead:focus-visible,.fhX:focus-visible,.fhBtn:focus-visible,.fhLink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}' +
-    '.fhCardTitle{display:block;font-size:17px;font-weight:700}' +
-    '.fhCardSub{display:block;color:var(--muted);font-size:13px}' +
+    '.fhCardHead{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}' +
+    '.fhCardHead:focus-visible,.fhX:focus-visible,.fhBtn:focus-visible,.fhLink:focus-visible,.fhAskBox .fhBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}' +
+    '.fhCardTitle{display:block;font-size:15px;font-weight:700}' +
     '.fhChev{margin-left:auto;flex:none;color:var(--muted);transition:transform .15s}' +
     '.fhCard.open .fhChev{transform:rotate(180deg)}' +
-    '.fhCardBody{padding:0 16px 18px}' +
+    '.fhCardBody{padding:0 16px 16px}' +
+    '.fhWhy{margin:0;color:var(--muted)}' +
+    '.fhCardBody ol{margin:6px 0 0;padding-left:22px;list-style:decimal}.fhCardBody li{margin:3px 0;display:list-item}' +
     '.fhCardBody[hidden]{display:none}' +
-    '.fhTip{background:var(--tipBg);border:1px solid var(--tipBorder);color:var(--tipText);border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:6px}' +
-    '.fhTip b{display:block;margin-top:4px}' +
-    '.fhProb{padding-top:16px}' +
-    '.fhProb+.fhProb{border-top:1px solid var(--border);margin-top:16px}' +
-    '.fhProb h3{margin:0;font-size:15px;font-weight:700;color:var(--accent)}' +
-    '.fhProb h4{margin:10px 0 2px;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}' +
-    '.fhProb p{margin:0}' +
-    '.fhProb ol{margin:0;padding-left:22px;list-style:decimal}.fhProb li{margin:2px 0;display:list-item}' +
-    '.fhProb.flash{animation:fhFlash 1.4s ease-out}' +
-    '@keyframes fhFlash{0%{background:var(--tonal)}100%{background:transparent}}' +
-    '.fhCookies{border:1px solid var(--border);border-radius:16px;background:var(--card);padding:16px}' +
+    '.fhTip{background:var(--tipBg);border:1px solid var(--tipBorder);color:var(--tipText);border-radius:12px;padding:10px 12px;font-size:13px;margin-top:12px}' +
+    '.fhCard.flash{animation:fhFlash 1.4s ease-out}' +
+    '@keyframes fhFlash{0%{background:var(--tonal)}100%{background:var(--card)}}' +
+    '.fhCookies{border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px}' +
     '.fhCookies h3{margin:0;font-size:15px;font-weight:700}.fhCookies p{margin:4px 0 0;color:var(--muted);font-size:13px}' +
     '.fhRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}' +
     '.fhRow input[type=file]{font-size:12.5px;max-width:100%;min-width:0;flex:1 1 200px}' +
     '.fhBtn{border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);padding:7px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}' +
     '.fhBtn:hover{border-color:var(--accent)}' +
-    '#helpButton{border-radius:8px;padding:6px 12px;font-size:12px;margin-right:8px;color:#475569}html.dark #helpButton{color:#cbd5e1}' +
+    '#helpButton{height:40px;border-radius:12px;padding:0 16px;font-size:13px;color:#475569}html.dark #helpButton{color:#cbd5e1}' +
     '.fhBtn.primary{background:var(--accent);border-color:var(--accent);color:#fff}' +
     'html.dark .fhBtn.primary{color:#0b101c}' +
     '.fhStatus{margin-top:10px!important;font-size:12.5px!important}' +
@@ -232,7 +179,8 @@
   var CHEVRON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   var CLOSE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
-  var overlay, box, lastError = '';
+  var overlay, box, ask, lastError = '';
+  var afterClose = null;   // runs when Help closes (the link waiting for the login question)
 
   function setOpen(card, open) {
     card.classList.toggle('open', open);
@@ -240,29 +188,21 @@
     card.querySelector('.fhCardBody').hidden = !open;
   }
 
-  function buildCard(c) {
-    var card = el('section', { 'class': 'fhCard', id: 'help-card-' + c.id });
+  // One topic: a title button that opens and closes it, then why (problems), the steps, a note, and extra content.
+  function buildSection(id, title, why, steps, note, extra) {
+    var card = el('section', { 'class': 'fhCard', id: 'help-' + id });
     var head = el('button', { type: 'button', 'class': 'fhCardHead', 'aria-expanded': 'false' }, [
-      el('span', null, [el('span', { 'class': 'fhCardTitle', text: c.title }), el('span', { 'class': 'fhCardSub', text: c.subtitle })])
+      el('span', { 'class': 'fhCardTitle', text: title })
     ]);
     var chev = el('span', { 'class': 'fhChev', 'aria-hidden': 'true' }); chev.innerHTML = CHEVRON;
     head.appendChild(chev);
     var body = el('div', { 'class': 'fhCardBody', hidden: '' });
-    if (c.tip) {
-      var tip = el('div', { 'class': 'fhTip' }, [document.createTextNode(TIP), el('b', { text: COOKIE_NOTE })]);
-      body.appendChild(tip);
-    }
-    c.problems.forEach(function (p) {
-      var d = el('div', { 'class': 'fhProb', id: 'help-' + p.id });
-      d.appendChild(el('h3', { text: p.title }));
-      d.appendChild(el('h4', { text: 'What you see' })); d.appendChild(el('p', { text: p.see }));
-      d.appendChild(el('h4', { text: 'Why' })); d.appendChild(el('p', { text: p.why }));
-      d.appendChild(el('h4', { text: 'How to fix' }));
-      var ol = el('ol');
-      p.fix.forEach(function (s) { ol.appendChild(el('li', { text: s })); });
-      d.appendChild(ol);
-      body.appendChild(d);
-    });
+    if (why) body.appendChild(el('p', { 'class': 'fhWhy', text: why }));
+    var ol = el('ol');
+    steps.forEach(function (s) { ol.appendChild(el('li', { text: s })); });
+    body.appendChild(ol);
+    if (note) body.appendChild(el('div', { 'class': 'fhTip', text: note }));
+    if (extra) body.appendChild(extra);
     head.addEventListener('click', function () { setOpen(card, !card.classList.contains('open')); });
     card.appendChild(head); card.appendChild(body);
     return card;
@@ -275,30 +215,82 @@
     var x = el('button', { type: 'button', 'class': 'fhX', 'aria-label': 'Close help' }); x.innerHTML = CLOSE;
     x.addEventListener('click', closeHelp);
     box.appendChild(el('div', { 'class': 'fhHead' }, [
-      el('div', null, [el('h2', { text: 'Help' }), el('p', { text: 'Click a card to open it. Each problem says what you see, why it happens, and how to fix it.' })]),
+      el('div', null, [el('h2', { text: 'Help' }), el('p', { text: 'Click a topic to open it.' })]),
       x
     ]));
 
     var body = el('div', { 'class': 'fhBody' });
-    body.appendChild(el('p', { 'class': 'fhNote', text: COOKIE_NOTE }));
-    ['Playlists: paste a playlist link, tick the videos you want, pick one quality, then press Download.',
-      'They are saved in Downloads, in a folder named after the playlist, with a number in front of each name.',
-      'Videos you already have, and private or deleted ones, are skipped. Use "Retry failed" at the end.'
-    ].forEach(function (line) { body.appendChild(el('p', { style: 'margin:0;font-size:13.5px;color:var(--muted)', text: line })); });
-    CARDS.forEach(function (c) { body.appendChild(buildCard(c)); });
-    body.appendChild(buildCookies());
+    body.appendChild(el('h3', { 'class': 'fhGroup', text: 'How to' }));
+    GUIDES.forEach(function (g) { body.appendChild(buildSection(g.id, g.title, null, g.steps, g.note, g.cookies ? buildCookies() : null)); });
+    body.appendChild(el('h3', { 'class': 'fhGroup', text: 'Fix a problem' }));
+    PROBLEMS.forEach(function (p) { body.appendChild(buildSection(p.id, p.title, p.why, p.fix, null, null)); });
 
     var copy = el('button', { type: 'button', 'class': 'fhBtn', text: 'Copy error details' });
     copy.addEventListener('click', function () { copyDetails(copy); });
     var close = el('button', { type: 'button', 'class': 'fhBtn', text: 'Close' });
     close.addEventListener('click', closeHelp);
-    body.appendChild(el('div', { 'class': 'fhFoot' }, [copy, close]));
+    body.appendChild(el('div', { 'class': 'fhFoot', style: 'margin-top:8px' }, [copy, close]));
     box.appendChild(body);
 
     overlay = el('div', { id: 'fhOverlay' }, [box]);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeHelp(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeHelp(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (ask.classList.contains('open')) closeAsk(true); else closeHelp();
+    });
     document.body.appendChild(overlay);
+    buildAsk();
+  }
+
+  // ---- "Log in to YouTube first?" Asked once, for the first YouTube link while no login is set up ----
+  var ASKED_KEY = 'fetchly-yt-login-asked', YT_HOST = /(^|\.)(youtube\.com|youtu\.be)$/i;
+  var askCont = null, askBusy = false, noCookieApi = false;
+
+  function buildAsk() {
+    var yes = el('button', { type: 'button', 'class': 'fhBtn primary', text: 'Log in' });
+    var no = el('button', { type: 'button', 'class': 'fhBtn', text: 'Not now' });
+    yes.addEventListener('click', function () {
+      afterClose = askCont; askCont = null;   // the link goes on when Help closes
+      closeAsk(false);
+      openHelp('login');
+    });
+    no.addEventListener('click', function () { closeAsk(true); });
+    ask = el('div', { id: 'fhAsk', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'fhAskTitle' }, [
+      el('div', { 'class': 'fhAskBox' }, [
+        el('h2', { id: 'fhAskTitle', text: 'Log in to YouTube first?' }),
+        el('p', { text: 'YouTube often blocks downloads when you are not logged in. Set up your login once now, and your downloads work later.' }),
+        el('p', { text: TIP }),
+        el('div', { 'class': 'fhFoot' }, [yes, no])
+      ])
+    ]);
+    document.body.appendChild(ask);
+  }
+
+  function closeAsk(goOn) {
+    ask.classList.remove('open');
+    var f = askCont; askCont = null;
+    if (goOn && f) f();
+  }
+
+  // True when Fetchy asks first: then cont() runs after the answer. False: go on now.
+  function askLogin(url, cont) {
+    var host = '';
+    try { host = new URL(url).hostname; } catch (e) { return false; }
+    if (noCookieApi || !YT_HOST.test(host)) return false;
+    try { if (localStorage.getItem(ASKED_KEY)) return false; } catch (e) { return false; }
+    askCont = cont;   // a newer link replaces the waiting one
+    if (askBusy || ask.classList.contains('open')) return true;
+    askBusy = true;
+    api('GET', '/api/cookies').then(function (j) {
+      askBusy = false;
+      if (j.file || j.browser) { closeAsk(true); return; }   // a login is already set up
+      try { localStorage.setItem(ASKED_KEY, '1'); } catch (e) {}
+      ask.classList.add('open');
+      ask.querySelector('.primary').focus();
+    }, function () {   // no login settings here (for example the web version): just go on
+      askBusy = false; noCookieApi = true; closeAsk(true);
+    });
+    return true;
   }
 
   // ---- Cookies box: use browser cookies or upload cookies.txt (local use only) ----
@@ -366,21 +358,26 @@
     };
   }
 
-  // Open the guide. With a problem id, open its card and scroll to it.
+  // Open the guide. With a topic id, open that section and scroll to it.
   function openHelp(topicId) {
     var cards = overlay.querySelectorAll('.fhCard');
     for (var i = 0; i < cards.length; i++) setOpen(cards[i], false);
     overlay.classList.add('open');
     box.scrollTop = 0;
     refreshCookies();
-    if (!topicId) return;
-    var d = document.getElementById('help-' + topicId);
-    if (!d) return;
-    setOpen(d.closest('.fhCard'), true);
+    var d = topicId && document.getElementById('help-' + topicId);
+    if (!d) { box.querySelector('.fhX').focus(); return; }
+    setOpen(d, true);
     d.scrollIntoView({ block: 'start' });
+    d.querySelector('.fhCardHead').focus({ preventScroll: true });
     d.classList.remove('flash'); void d.offsetWidth; d.classList.add('flash');
   }
-  function closeHelp() { overlay.classList.remove('open'); }
+  function closeHelp() {
+    if (!overlay.classList.contains('open')) return;
+    overlay.classList.remove('open');
+    var f = afterClose; afterClose = null;
+    if (f) f();
+  }
 
   function details(msg) {
     var tv = document.getElementById('toolVersions');
@@ -409,14 +406,14 @@
 
   // Watch the app's error text boxes and add the two small buttons next to them.
   function watch(textId) {
-    var node = document.getElementById(textId);
+    var node = typeof textId === 'string' ? document.getElementById(textId) : textId;   // an id, or the element itself
     if (!node || !node.parentNode) return;
     var holder = el('span', { 'class': 'fhHolder' });
     node.parentNode.insertBefore(holder, node.nextSibling);
     function refresh() {
       var msg = node.textContent.trim();
       holder.textContent = '';
-      if (!msg) return;
+      if (!msg || /^Not supported:/.test(msg)) return;   // nothing to fix for a site Fetchy cannot download from
       lastError = msg;
       var id = findTopic(msg);
       if (id) {
@@ -434,13 +431,16 @@
 
   function init() {
     build();
-    var upd = document.getElementById('updateTools');
     var help = el('button', { type: 'button', id: 'helpButton', 'class': 'fhBtn', text: 'Help' });
     help.addEventListener('click', function () { openHelp(); });
-    if (upd && upd.parentNode) upd.parentNode.insertBefore(help, upd);
-    else { help.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:50'; document.body.appendChild(help); }
+    var theme = document.getElementById('themeToggle');
+    if (theme && theme.parentNode) {
+      var wrap = el('div', { style: 'display:flex;align-items:center;gap:8px' });
+      theme.parentNode.insertBefore(wrap, theme);
+      wrap.appendChild(help); wrap.appendChild(theme);
+    } else { help.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:50'; document.body.appendChild(help); }
     watch('videoErrorText');
-    window.fetchlyHelp = { open: openHelp, find: findTopic };
+    window.fetchlyHelp = { open: openHelp, find: findTopic, askLogin: askLogin, watch: watch };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

@@ -1,19 +1,17 @@
-"""Routes: single video info, download, progress events and the finished file."""
+"""Routes: single video info, download, progress, cancel and the finished file."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import mimetypes
-import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from .. import config
@@ -21,13 +19,12 @@ from ..config import AUDIO_KEYS, IMAGE_ACCEPT, IMAGE_EXTENSIONS, logger
 from ..errors import FriendlyError, friendly_ytdlp_error, strip_ansi
 from ..formats import BEST_ONLY_FORMATS, format_selector
 from ..http_fetch import fetch_public_bytes, inspect_image_bytes
-from ..jobs import TERMINAL_STATES, Job, job_store
+from ..jobs import Job, job_store
 from ..playlist_zip import extract_playlist_info_sync
 from ..ratelimit import rate_limit
-from ..urls import ensure_public_url
+from ..urls import ensure_public_url, unsupported_link
 from ..utils import utc_now
-from ..video import download_video_sync, extract_video_info_sync
-from .tasks import spawn
+from ..video import DOWNLOAD_POOL, download_video_sync, extract_video_info_sync
 
 router = APIRouter()
 
@@ -69,9 +66,10 @@ def _offer_best_only(job: Job, url: str) -> None:
     )
 
 
-@router.post("/api/video/info", dependencies=[Depends(rate_limit("video-info", 12))])
+@router.post("/api/video/info", dependencies=[Depends(rate_limit("video-info", 30))])
 async def video_info(payload: UrlRequest) -> dict[str, Any]:
     url = await ensure_public_url(payload.url)
+    unsupported_link(url)
     if Path(urlsplit(url).path).suffix.lower() in IMAGE_EXTENSIONS:
         raise FriendlyError("Fetchy downloads videos only.", 422, "videos_only")
     job = job_store.create(kind="video", url=url, state="fetching_info")
@@ -123,7 +121,7 @@ async def video_info(payload: UrlRequest) -> dict[str, Any]:
     return {"job_id": job.id, "state": "ready", "video": video}
 
 
-@router.post("/api/video/download", dependencies=[Depends(rate_limit("video-download", 6))])
+@router.post("/api/video/download", dependencies=[Depends(rate_limit("video-download", 30))])
 async def video_download(payload: VideoDownloadRequest) -> dict[str, Any]:
     job = get_job_or_404(payload.job_id)
     if job.kind != "video":
@@ -149,7 +147,7 @@ async def video_download(payload: VideoDownloadRequest) -> dict[str, Any]:
         error=None,
         expires_at=None,
         progress={
-            "stage": "starting",
+            "stage": "queued",   # becomes "starting" when a free download slot picks it up
             "percent": 0.0,
             "downloaded_bytes": 0,
             "total_bytes": None,
@@ -158,8 +156,18 @@ async def video_download(payload: VideoDownloadRequest) -> dict[str, Any]:
         },
     )
     subs_auto = bool(subs and sub_options[subs]["auto"])
-    spawn(asyncio.to_thread(download_video_sync, job.id, payload.quality, subs, subs_auto))
+    asyncio.get_running_loop().run_in_executor(DOWNLOAD_POOL, download_video_sync, job.id, payload.quality, subs, subs_auto)
     return {"job_id": job.id, "state": "downloading"}
+
+
+@router.post("/api/video/{job_id}/cancel")
+async def video_cancel(job_id: str) -> dict[str, Any]:
+    """Stop one download. Other downloads go on."""
+    job = get_job_or_404(job_id)
+    if job.kind != "video":
+        raise HTTPException(status_code=400, detail="That job isn't a video download.")
+    job_store.cancel(job_id)
+    return job_store.status(job_id) or {"job_id": job_id, "state": "cancelled"}
 
 
 @router.get("/api/video/{job_id}/thumbnail")
@@ -185,40 +193,6 @@ async def job_status(job_id: str) -> dict[str, Any]:
     if not status:
         raise HTTPException(status_code=404, detail="That download link has expired.")
     return status
-
-
-@router.get("/api/jobs/{job_id}/events")
-async def job_events(job_id: str, request: Request) -> StreamingResponse:
-    get_job_or_404(job_id)
-
-    async def event_stream():
-        last_payload: str | None = None
-        last_sent = time.monotonic()
-        while True:
-            if await request.is_disconnected():
-                break
-            status = job_store.status(job_id)
-            if status is None:
-                payload = json.dumps({"job_id": job_id, "state": "error", "error": "This job has expired.", "progress": {}})
-                yield f"data: {payload}\n\n"
-                break
-            payload = json.dumps(status, separators=(",", ":"))
-            if payload != last_payload:
-                yield f"data: {payload}\n\n"
-                last_payload = payload
-                last_sent = time.monotonic()
-            if status["state"] in TERMINAL_STATES:
-                break
-            if time.monotonic() - last_sent > 12:
-                yield ": keep-alive\n\n"
-                last_sent = time.monotonic()
-            await asyncio.sleep(0.35)
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
 
 
 @router.get("/api/download/{job_id}")

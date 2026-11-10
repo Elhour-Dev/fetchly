@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
 from functools import lru_cache
 from urllib.parse import urlsplit, urlunsplit
@@ -67,6 +68,33 @@ def normalize_url(raw: str) -> str:
     netloc = f"{host_repr}:{port}" if port else host_repr
     path = parts.path or "/"
     return urlunsplit((scheme, netloc, path, parts.query, ""))
+
+
+# Sites Fetchy cannot download from. The app says so at once instead of trying.
+UNSUPPORTED_INSTAGRAM_STORY = "Not supported: Instagram stories can't be downloaded with Fetchy."
+UNSUPPORTED_SNAPCHAT = "Not supported: Snapchat links can't be downloaded with Fetchy."
+
+
+def unsupported_reason(url: str) -> str | None:
+    """The "Not supported" message for an Instagram story or a Snapchat link, else None."""
+    try:
+        parts = urlsplit(url.strip())
+        host = (parts.hostname or "").lower().rstrip(".")
+    except ValueError:
+        return None
+    if host == "snapchat.com" or host.endswith(".snapchat.com"):
+        return UNSUPPORTED_SNAPCHAT
+    if host == "instagram.com" or host.endswith(".instagram.com"):
+        # /stories/<user>/... and story highlights (/stories/highlights/..., /s/...)
+        if re.match(r"^/(stories|s)/", parts.path or "", re.I):
+            return UNSUPPORTED_INSTAGRAM_STORY
+    return None
+
+
+def unsupported_link(url: str) -> None:
+    reason = unsupported_reason(url)
+    if reason:
+        raise FriendlyError(reason, 422, "unsupported_link")
 
 
 @lru_cache(maxsize=1024)

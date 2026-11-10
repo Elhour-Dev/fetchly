@@ -67,7 +67,6 @@
     wait.append(h('p', 'soft-pulse text-[14px] font-semibold text-slate-700 dark:text-slate-200', 'Fetching playlist…'),
       h('p', 'mt-1 ' + MUTED, 'Big playlists can take a few seconds.'));
     panel.replaceChildren(wait);
-    F.setButtonLoading(F.fetchButton, true, 'Fetching…');
     try {
       const r = await F.api('/api/playlist/info', { method: 'POST', body: { url }, timeout: 250000 });
       if (seq !== st.seq) return;
@@ -85,8 +84,6 @@
       box.append(again);
       panel.replaceChildren(box);
       F.toast(message, 'error', 5200);
-    } finally {
-      if (seq === st.seq) F.setButtonLoading(F.fetchButton, false);
     }
   }
 

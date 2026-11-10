@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:" />
+  <title>Fetchy</title>
+  <!-- Start screen: checks for a new version, then hands over to the app. Works offline (no outside files). -->
+  <style>
+    :root { --bg: #f8fafc; --card: #fff; --border: #e2e8f0; --text: #0f172a; --muted: #64748b; --accent: #4f46e5; --onAccent: #fff; --track: #e2e8f0; color-scheme: light; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #080b14; --card: #0d1220; --border: rgba(255,255,255,.1); --text: #f1f5f9; --muted: #94a3b8; --accent: #818cf8; --onAccent: #0b101c; --track: rgba(255,255,255,.1); color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--text); font: 14.5px/1.5 "Segoe UI", system-ui, sans-serif; display: flex; align-items: center; justify-content: center; padding: 24px; user-select: none; }
+    main { width: 100%; max-width: 380px; text-align: center; }
+    .logo { width: 56px; height: 56px; margin: 0 auto; display: flex; }
+    h1 { margin: 14px 0 0; font-size: 22px; font-weight: 700; }
+    #status { margin: 6px 0 0; color: var(--muted); }
+    .spin { width: 22px; height: 22px; margin: 18px auto 0; border: 3px solid var(--track); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .bar { height: 8px; margin-top: 18px; border-radius: 99px; background: var(--track); overflow: hidden; }
+    .bar div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+    #notes { margin-top: 14px; max-height: 150px; overflow-y: auto; text-align: left; white-space: pre-wrap; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--muted); user-select: text; }
+    #notes b { display: block; color: var(--text); margin-bottom: 2px; }
+    .buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+    button { height: 44px; border-radius: 12px; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--onAccent); }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="logo" aria-hidden="true">
+      <svg width="56" height="56" viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="bg" x1="0.15" y1="0" x2="0.85" y2="1"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs><rect width="1024" height="1024" rx="232" fill="url(#bg)"/><g transform="translate(0 -15)"><rect x="432" y="190" width="160" height="300" rx="48" fill="#fff"/><path d="M290 458H734L512 712Z" fill="#fff" stroke="#fff" stroke-width="64" stroke-linejoin="round"/><rect x="262" y="790" width="500" height="88" rx="44" fill="#c7d2fe"/></g></svg>
+    </div>
+    <h1 id="title">Fetchy</h1>
+    <p id="status" role="status" aria-live="polite">Checking for updates…</p>
+    <div id="spin" class="spin" aria-hidden="true"></div>
+    <div id="bar" class="bar" hidden><div></div></div>
+    <div id="notes" hidden></div>
+    <div id="buttons" class="buttons" hidden>
+      <button id="update" type="button" class="primary">Update</button>
+      <button id="skip" type="button">Skip</button>
+    </div>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    function show(id, on) { $(id).hidden = !on; }
+    $('update').onclick = () => window.fetchy.choose('update');
+    $('skip').onclick = () => window.fetchy.choose('skip');
+    window.fetchy.onState(s => {
+      document.title = 'Fetchy · ' + s.step;   // also lets a test see the current step
+      show('spin', s.step === 'checking' || s.step === 'starting');
+      show('bar', s.step === 'downloading');
+      show('notes', s.step === 'update' && !!s.notes);
+      show('buttons', s.step === 'update');
+      if (s.step === 'checking') { $('title').textContent = 'Fetchy'; $('status').textContent = 'Checking for updates…'; }
+      if (s.step === 'starting') { $('title').textContent = 'Fetchy'; $('status').textContent = s.text || 'Starting…'; }
+      if (s.step === 'update') {
+        $('title').textContent = 'New version ' + s.version;
+        $('status').textContent = 'Update now, or skip and use this version.';
+        $('notes').textContent = '';
+        const b = document.createElement('b'); b.textContent = "What's new";
+        $('notes').append(b, document.createTextNode(s.notes || ''));
+        $('update').focus();
+      }
+      if (s.step === 'downloading') {
+        $('title').textContent = 'Downloading the update';
+        $('status').textContent = s.percent >= 0 ? s.percent + '%' : 'Please wait…';
+        $('bar').firstElementChild.style.width = Math.max(0, s.percent) + '%';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -31,6 +31,8 @@ function download(url, dest) {
   if (!fs.existsSync(path.join(lib, 'yt_dlp'))) {
     execFileSync('python', ['-m', 'pip', 'install', '--target', lib, '--only-binary', ':all:',
       '--disable-pip-version-check', 'pip', '-r', path.join(root, 'requirements.txt')], { stdio: 'inherit' });
+    // Compile the packages with the bundled Python, with "pylib" as their path (not this PC's folder).
+    execFileSync(path.join(pyDir, 'python.exe'), ['-m', 'compileall', '-q', '-f', '-s', lib, '-p', 'pylib', lib], { stdio: 'inherit' });
   }
   const ff = path.join(vendor, 'ffmpeg');
   fs.mkdirSync(ff, { recursive: true });

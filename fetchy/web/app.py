@@ -18,7 +18,6 @@ from ..config import APP_NAME, APP_PASSWORD, APP_VERSION, logger
 from ..errors import FriendlyError
 from ..jobs import job_store
 from . import routes_cookies, routes_pages, routes_playlist, routes_video
-from .tasks import cancel_background_tasks
 from .security import basic_auth_ok
 
 
@@ -58,7 +57,6 @@ async def lifespan(_: FastAPI):
         cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await cleanup_task
-        cancel_background_tasks()
         await http_fetch.close_client()
 
 

@@ -80,7 +80,7 @@ class SettingsActivity : ThemedActivity() {
         val has = Tools.cookiesFile(this).exists()
         cookieInfo.text = if (has) "Saved on this phone. Kept private." else "None saved."
         remove.isEnabled = has; remove.alpha = if (has) 1f else 0.5f
-        update.isEnabled = !updating && State.phase != State.Phase.RUNNING
+        update.isEnabled = !updating && !State.busy()
         update.alpha = if (update.isEnabled) 1f else 0.5f
     }
 

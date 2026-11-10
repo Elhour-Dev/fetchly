@@ -339,3 +339,133 @@ def test_video_info_accepts_playlist_flag(client, monkeypatch):
     assert r.status_code == 200, r.text
     assert r.json()["video"]["is_playlist"] is True
     assert calls
+
+
+def _fake_ydl(on_download):
+    class FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download):
+            on_download(self.opts)
+            Path(self.opts["outtmpl"].replace("%(ext)s", "mp4")).write_bytes(b"video")
+            return {"title": "t"}
+
+    return FakeYDL
+
+
+def _ready_job(state="downloading", stage="starting"):
+    job = jobs.job_store.create(kind="video", url="https://example.com/v", state=state)
+    jobs.job_store.update(job.id, video={"title": "v", "formats": []})
+    jobs.job_store.set_progress(job.id, stage=stage)
+    return job
+
+
+def test_cancel_running_download_stops_only_that_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DOWNLOADS_DIR", tmp_path)
+    stop, keep = _ready_job(), _ready_job()
+
+    def on_download(opts):
+        if stop.id in opts["outtmpl"]:
+            jobs.job_store.cancel(stop.id)   # the user presses Cancel while bytes come in
+            opts["progress_hooks"][0]({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 10})
+
+    monkeypatch.setattr(engine.yt_dlp, "YoutubeDL", _fake_ydl(on_download))
+    video.download_video_sync(stop.id, "best")
+    video.download_video_sync(keep.id, "best")
+    assert jobs.job_store.get(stop.id).state == "cancelled"
+    assert not list(tmp_path.glob(f"{stop.id}*"))
+    assert jobs.job_store.get(keep.id).state == "complete"
+
+
+def test_cancel_queued_download_never_starts(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DOWNLOADS_DIR", tmp_path)
+    job = _ready_job(stage="queued")
+    jobs.job_store.cancel(job.id)
+    assert jobs.job_store.get(job.id).state == "cancelled"   # at once, no need to wait for a slot
+    started = []
+    monkeypatch.setattr(engine.yt_dlp, "YoutubeDL", _fake_ydl(started.append))
+    video.download_video_sync(job.id, "best")
+    assert not started and jobs.job_store.get(job.id).state == "cancelled"
+    # A job that is not downloading cannot be cancelled (so a later download is not stopped by mistake).
+    ready = _ready_job(state="ready")
+    jobs.job_store.cancel(ready.id)
+    assert not jobs.job_store.get(ready.id).cancel_requested
+
+
+def test_download_pool_runs_a_few_at_a_time(tmp_path, monkeypatch):
+    import threading
+
+    monkeypatch.setattr(config, "DOWNLOADS_DIR", tmp_path)
+    lock, running, peak = threading.Lock(), [0], [0]
+
+    def on_download(opts):
+        with lock:
+            running[0] += 1
+            peak[0] = max(peak[0], running[0])
+        time.sleep(0.15)
+        with lock:
+            running[0] -= 1
+
+    monkeypatch.setattr(engine.yt_dlp, "YoutubeDL", _fake_ydl(on_download))
+    ids = [_ready_job(stage="queued").id for _ in range(config.MAX_PARALLEL_DOWNLOADS + 3)]
+    futures = [video.DOWNLOAD_POOL.submit(video.download_video_sync, i, "best") for i in ids]
+    for f in futures:
+        f.result(timeout=10)
+    assert peak[0] == config.MAX_PARALLEL_DOWNLOADS
+    assert all(jobs.job_store.get(i).state == "complete" for i in ids)
+
+
+def test_cancel_route(client):
+    job = _ready_job(stage="queued")
+    r = client.post(f"/api/video/{job.id}/cancel")
+    assert r.status_code == 200 and r.json()["state"] == "cancelled"
+    assert client.post("/api/video/not-a-job/cancel").status_code == 404
+
+
+# --- Links Fetchy does not support ---------------------------------------------
+
+@pytest.mark.parametrize("url, word", [
+    ("https://www.instagram.com/stories/natgeo/3456789012345678901/", "Instagram stories"),
+    ("https://instagram.com/stories/natgeo/", "Instagram stories"),
+    ("https://www.instagram.com/stories/highlights/17900000000000000/", "Instagram stories"),
+    ("https://www.instagram.com/s/aGlnaGxpZ2h0OjE3OTAw?igsh=abc", "Instagram stories"),
+    ("https://www.snapchat.com/spotlight/W7_EDlXWTBiXAEEniNoMPwAAYc", "Snapchat"),
+    ("https://story.snapchat.com/p/abc", "Snapchat"),
+    ("https://t.snapchat.com/AbCdEf", "Snapchat"),
+])
+def test_unsupported_links_say_which(url, word):
+    reason = urls.unsupported_reason(url)
+    assert reason and reason.startswith("Not supported") and word in reason
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.instagram.com/p/C1abc/",
+    "https://www.instagram.com/reel/C1abc/",
+    "https://www.youtube.com/watch?v=abc",
+    "https://notsnapchat.com/x",
+    "https://example.com/stories/a",
+])
+def test_supported_links_pass(url):
+    assert urls.unsupported_reason(url) is None
+
+
+def test_video_info_refuses_unsupported_link_at_once(client, monkeypatch):
+    async def public(url):
+        return url
+
+    def never(url):
+        raise AssertionError("must not ask yt-dlp")
+
+    monkeypatch.setattr("fetchy.web.routes_video.ensure_public_url", public)
+    monkeypatch.setattr("fetchy.web.routes_video.extract_video_info_sync", never)
+    r = client.post("/api/video/info", json={"url": "https://www.snapchat.com/spotlight/abc"})
+    assert r.status_code == 422
+    assert r.json()["error"] == "unsupported_link"
+    assert "Snapchat" in r.json()["message"]

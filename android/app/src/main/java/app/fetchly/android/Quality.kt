@@ -12,8 +12,9 @@ class QOption(val key: String, val label: String, val detail: String, val size: 
 /** A subtitle language the video offers. [auto] = automatic captions. */
 class Sub(val code: String, val name: String, val auto: Boolean)
 
-/** What the site offers for one video. */
-class Loaded(val options: List<QOption>, val subs: List<Sub>)
+/** What the site offers for one video, plus what to show above the choices. [duration] in seconds (0 = unknown). */
+class Loaded(val options: List<QOption>, val subs: List<Sub>, val title: String = "", val duration: Double = 0.0,
+             val thumbnail: String = "", val uploader: String = "")
 
 /** Loads what a video offers and turns it into the same choices as the desktop app. */
 object Quality {
@@ -74,7 +75,8 @@ object Quality {
         val info = JSONObject(json)
         // Keep the answer so the download does not ask the site again (a second request is often refused, e.g. TikTok 403).
         if (info.optString("_type", "video") == "video") try { infoFile(ctx).writeText(json) } catch (_: Exception) {}
-        return Loaded(options(info), subtitles(info))
+        return Loaded(options(info), subtitles(info), info.str("title"), info.num("duration"), info.str("thumbnail"),
+            info.str("uploader").ifEmpty { info.str("channel") })
     }
 
     private val subCode = Regex("[A-Za-z0-9][A-Za-z0-9_-]{0,31}")

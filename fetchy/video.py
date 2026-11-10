@@ -3,17 +3,30 @@
 from __future__ import annotations
 
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from . import config, engine, playlist_zip
-from .config import logger
+from .config import AUDIO_KEYS, logger
 from .errors import LOGIN_HELP_BOT, FriendlyError, friendly_ytdlp_error
-from .config import AUDIO_KEYS
 from .formats import build_format_options, build_subtitle_options, extra_attempts, format_selector
 from .jobs import job_store
 from .utils import coerce_float, coerce_int, sanitize_filename
 from .ydl_options import single_video_options
+
+# Single video downloads run here: a few at a time, the rest wait in the queue (stage "queued").
+DOWNLOAD_POOL = ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_DOWNLOADS, thread_name_prefix="download")
+
+
+class _Cancelled(Exception):
+    """Raised from the progress hook when the user cancelled this download."""
+
+
+def _cancelled(job_id: str) -> bool:
+    job = job_store.get(job_id)
+    return bool(job and job.cancel_requested)
+
 
 # Thumbnails and subtitle files that yt-dlp writes next to the media file.
 SIDE_FILE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".srt", ".vtt", ".ass", ".lrc", ".json"}
@@ -104,6 +117,8 @@ def find_finished_file(job_id: str) -> Path | None:
 
 def _progress_hooks(job_id: str):
     def progress_hook(data: dict[str, Any]) -> None:
+        if _cancelled(job_id):
+            raise _Cancelled()
         status = data.get("status")
         if status == "downloading":
             total = coerce_int(data.get("total_bytes")) or coerce_int(data.get("total_bytes_estimate"))
@@ -144,7 +159,7 @@ def _run_download(job_id: str, url: str, options: dict[str, Any], attempts: list
                 info = ydl.extract_info(url, download=True)
             return info if isinstance(info, dict) else {}
         except Exception:
-            if number == len(attempts) - 1:
+            if number == len(attempts) - 1 or _cancelled(job_id):
                 raise
             # Cover art / subtitles failed: start over with the plain download.
             logger.info("Video job %s: extras failed, retrying without them", job_id)
@@ -156,6 +171,9 @@ def _run_download(job_id: str, url: str, options: dict[str, Any], attempts: list
 def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs_auto: bool = False) -> None:
     job = job_store.get(job_id)
     if not job or not job.video:
+        return
+    if job.cancel_requested:   # cancelled while waiting in the queue
+        job_store.mark_cancelled(job_id)
         return
 
     selector = format_selector(quality)
@@ -184,6 +202,8 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
 
     try:
         info = _run_download(job_id, job.url, options, attempts)
+        if _cancelled(job_id):   # pressed during the final merge
+            raise _Cancelled()
         if not job.video.get("title"):   # details were not read before the download: name the file now
             job.video["title"] = str(info.get("title") or "").strip()[:300]
         if is_playlist:
@@ -206,15 +226,19 @@ def download_video_sync(job_id: str, quality: str, subs: str | None = None, subs
                     stray.unlink()
         job_store.complete(job_id, file_path=final_file, download_name=download_name)
         logger.info("Video job %s complete (%s)", job_id, final_file.name)
-    except FriendlyError as exc:
-        playlist_zip.remove_work_dir(job_id)
-        cleanup_job_files(job_id)
-        job_store.fail(job_id, exc.message)
-        logger.warning("Video job %s failed: %s", job_id, exc.message)
     except Exception as exc:
-        message = friendly_ytdlp_error(exc)
         playlist_zip.remove_work_dir(job_id)
         cleanup_job_files(job_id)
+        if _cancelled(job_id):
+            job_store.mark_cancelled(job_id)
+            logger.info("Video job %s cancelled", job_id)
+            return
+        if isinstance(exc, FriendlyError):
+            job_store.fail(job_id, exc.message)
+            logger.warning("Video job %s failed: %s", job_id, exc.message)
+            return
+        message = friendly_ytdlp_error(exc)
         job_store.fail(job_id, message)
         logger.warning("Video job %s failed: %s", job_id, message)
         logger.debug("yt-dlp error detail", exc_info=True)
+

@@ -14,7 +14,7 @@ from ..config import MIX_CAP
 from ..errors import FriendlyError, friendly_ytdlp_error, strip_ansi
 from ..formats import format_selector
 from ..playlist import PlaylistRun, extract_playlist_entries_sync, open_run, playlists
-from ..urls import ensure_public_url
+from ..urls import ensure_public_url, unsupported_link
 from .routes_video import UrlRequest
 from .security import is_local_request
 
@@ -50,6 +50,7 @@ def _run_or_404(request: Request, playlist_id: str) -> PlaylistRun:
 async def playlist_info(payload: UrlRequest, request: Request) -> dict[str, Any]:
     _require_desktop(request)
     url = await ensure_public_url(payload.url)
+    unsupported_link(url)
     try:
         info = await asyncio.wait_for(asyncio.to_thread(extract_playlist_entries_sync, url), timeout=240)
     except asyncio.TimeoutError:

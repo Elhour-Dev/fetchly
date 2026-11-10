@@ -37,16 +37,6 @@
     formatSize: $('formatSize'),
     formatDetail: $('formatDetail'),
     videoDownload: $('videoDownload'),
-    videoProgress: $('videoProgress'),
-    progressStage: $('progressStage'),
-    progressPercent: $('progressPercent'),
-    progressTrack: $('progressTrack'),
-    progressBar: $('progressBar'),
-    progressSpeed: $('progressSpeed'),
-    progressEta: $('progressEta'),
-    videoComplete: $('videoComplete'),
-    completeMeta: $('completeMeta'),
-    downloadLink: $('downloadLink'),
     ffmpegWarning: $('ffmpegWarning'),
     updateTools: $('updateTools'),
     updateStatus: $('updateStatus'),
@@ -87,11 +77,6 @@
       controller: null,
       jobId: null,
       data: null,
-      stream: null,
-      pollTimer: null,
-      pollToken: 0,
-      terminal: false,
-      autoDownloadedFor: null,
       fetchTimer: null,     // pending auto-fetch after typing
       lastFetched: null,    // the link the current result or error belongs to
     },
@@ -219,6 +204,19 @@
     if (!parsed.hostname) return 'That URL is missing a domain name.';
     if (!parsed.hostname.includes('.') && !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(parsed.hostname)) {
       return 'Enter a full public web address.';
+    }
+    return '';
+  }
+
+  // Sites Fetchy cannot download from: say so at once instead of trying (same text as fetchy/urls.py).
+  function unsupportedLink(value) {
+    let parsed;
+    try { parsed = new URL(value); } catch (_) { return ''; }
+    const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+    const on = (site) => host === site || host.endsWith(`.${site}`);
+    if (on('snapchat.com')) return "Not supported: Snapchat links can't be downloaded with Fetchy.";
+    if (on('instagram.com') && /^\/(stories|s)\//i.test(parsed.pathname)) {
+      return "Not supported: Instagram stories can't be downloaded with Fetchy.";
     }
     return '';
   }
@@ -439,37 +437,18 @@
 
   function setVideoPhase(phase) {
     state.video.phase = phase;
-    const showResult = phase === 'ready' || phase === 'downloading' || phase === 'complete';
+    const showResult = phase === 'ready';
     els.videoEmpty.hidden = phase !== 'idle';
     els.videoSkeleton.hidden = phase !== 'fetching';
     els.videoErrorCard.hidden = phase !== 'error';
     els.videoResult.hidden = !showResult;
     const playlistPanel = $('playlistPanel');
     if (playlistPanel) playlistPanel.hidden = phase !== 'playlist';
-
-    if (showResult) {
-      els.videoQualityBlock.hidden = phase !== 'ready';
-      els.videoDownload.hidden = phase !== 'ready';
-      els.videoProgress.hidden = phase !== 'downloading';
-      els.videoComplete.hidden = phase !== 'complete';
-    }
   }
 
   // ---------------------------------------------------------------------
   // Video flow
   // ---------------------------------------------------------------------
-  function closeVideoStream() {
-    if (state.video.stream) {
-      state.video.stream.close();
-      state.video.stream = null;
-    }
-    if (state.video.pollTimer) {
-      clearTimeout(state.video.pollTimer);
-      state.video.pollTimer = null;
-    }
-    state.video.pollToken += 1;
-  }
-
   function renderVideo(video) {
     els.videoTitle.textContent = video.title || 'Untitled video';
     const uploader = video.uploader || '';
@@ -517,8 +496,6 @@
     renderPresets();
     renderSubtitles(video.subtitles || []);
     updateFormatHint();
-    els.videoComplete.hidden = true;
-    els.videoProgress.hidden = true;
     els.videoQualityBlock.hidden = false;
     els.videoDownload.hidden = false;
     els.videoLive.textContent = `Video ready: ${video.title}. Choose a quality and download.`;
@@ -707,33 +684,35 @@
     }
   }
 
-  function updateVideoProgress(progress = {}) {
+  function updateRowProgress(row, progress = {}) {
     const stage = progress.stage || 'downloading';
     const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
-    els.progressBar.style.width = `${percent}%`;
-    els.progressPercent.textContent = `${percent.toFixed(percent > 0 && percent < 10 ? 1 : 0)}%`;
-    els.progressTrack.setAttribute('aria-valuenow', String(Math.round(percent)));
+    row.q('bar').style.width = `${percent}%`;
+    row.q('percent').textContent = `${percent.toFixed(percent > 0 && percent < 10 ? 1 : 0)}%`;
+    row.q('track').setAttribute('aria-valuenow', String(Math.round(percent)));
 
-    if (stage === 'processing' || stage === 'packaging') {
-      els.progressStage.textContent = 'Merging video & audio…';
-      els.progressPercent.textContent = '100%';
-    } else if (stage === 'starting') {
-      els.progressStage.textContent = 'Preparing download…';
-    } else if (stage === 'complete') {
-      els.progressStage.textContent = 'Finishing up…';
-    } else {
-      els.progressStage.textContent = 'Downloading…';
-    }
+    let text = 'Downloading…';
+    if (stage === 'queued') text = 'Waiting for other downloads…';
+    else if (stage === 'processing' || stage === 'packaging') text = 'Merging video & audio…';
+    else if (stage === 'starting') text = 'Preparing download…';
+    else if (stage === 'complete') text = 'Finishing up…';
+    row.q('stage').textContent = text;
+    if (stage === 'processing' || stage === 'packaging') row.q('percent').textContent = '100%';
 
-    els.progressSpeed.textContent = progress.speed ? `${formatBytes(progress.speed)}/s` : '—';
-    els.progressEta.textContent = stage === 'downloading' && progress.eta != null
+    row.q('speed').textContent = progress.speed ? `${formatBytes(progress.speed)}/s` : '—';
+    row.q('eta').textContent = stage === 'downloading' && progress.eta != null
       ? `${formatEta(progress.eta)} left`
       : '—';
-    els.progressBar.classList.toggle('soft-pulse', stage === 'processing');
+    row.q('bar').classList.toggle('soft-pulse', stage === 'processing');
+    row.stage = stage;
   }
 
   async function handleVideoSubmit(event) {
     event.preventDefault();
+    // First YouTube link without a login: ask first (static/help.js, only once). The fetch goes on after the answer.
+    const link = normalizeUrlInput(els.videoUrl.value);
+    if (!event.loginAsked && !validateUrl(link) &&
+        window.fetchlyHelp?.askLogin(link, () => handleVideoSubmit({ preventDefault() {}, loginAsked: true }))) return;
     clearTimeout(state.video.fetchTimer);
     state.video.fetchTimer = null;
     // A new link while one is still being fetched: the older request is dropped below (requestSeq).
@@ -750,6 +729,15 @@
     clearFieldError(els.videoUrl, els.videoUrlError);
     state.video.lastFetched = value;
 
+    const notSupported = unsupportedLink(value);
+    if (notSupported) {
+      state.video.requestSeq += 1;   // an older fetch still running must not replace this message
+      state.video.jobId = null;
+      state.video.data = null;
+      showVideoError(notSupported, false, true);
+      return;
+    }
+
     // Desktop app: playlist links open the playlist list instead (static/playlist.js).
     const playlists = state.health?.playlists && window.FetchyPlaylist;
     if (playlists && playlists.busy()) {
@@ -758,9 +746,6 @@
     }
     if (playlists && !event.singleVideo && playlists.open(value, () => handleVideoSubmit({ preventDefault() {}, singleVideo: true }))) return;
 
-    closeVideoStream();
-    state.video.terminal = false;
-    state.video.autoDownloadedFor = null;
     state.video.jobId = null;
     state.video.data = null;
     const seq = ++state.video.requestSeq;
@@ -801,41 +786,29 @@
   }
 
   // canDownload: show the "Download best quality" button (the details failed, but a download may still work).
-  function showVideoError(message, canDownload = false) {
-    closeVideoStream();
+  // notSupported: a site Fetchy cannot download from: no "Try again".
+  function showVideoError(message, canDownload = false, notSupported = false) {
     setVideoPhase('error');
+    $('videoErrorTitle').textContent = notSupported ? 'Not supported' : "Couldn't fetch that video";
+    els.videoRetry.hidden = notSupported;
     els.videoErrorText.textContent = message;
     els.videoErrorDownload.hidden = !canDownload;
     els.videoLive.textContent = `Video error: ${message}`;
     toast(message, 'error', 5200);
   }
 
-  // Shown while a best-quality download without video details runs.
-  function renderNoInfo(url) {
-    els.videoTitle.textContent = 'Best quality download';
-    els.videoUploader.textContent = '';
-    els.videoSource.textContent = shortenHost(url);
-    els.videoMetaDot.hidden = true;
-    els.videoDuration.hidden = true;
-    els.videoThumb.removeAttribute('src');
-    els.videoThumb.hidden = true;
-    els.videoThumbFallback.hidden = false;
-  }
-
   async function startVideoDownload() {
     const noInfo = Boolean(state.video.data?.no_info);
     const phaseOk = state.video.phase === 'ready' || (noInfo && state.video.phase === 'error');
-    if (!phaseOk || !state.video.jobId) return;
+    if (!phaseOk || !state.video.jobId || state.video.starting) return;
     const jobId = state.video.jobId;
+    const video = state.video.data || {};
     const quality = noInfo ? 'best' : els.videoQuality.value;
     const subs = noInfo ? null : chosenSubtitles();
-    state.video.sent = { quality, subs, label: noInfo ? 'Best quality' : (currentFormat()?.label || '') };
+    const label = noInfo ? 'Best quality' : (currentFormat()?.label || '');
+    const url = video.webpage_url || normalizeUrlInput(els.videoUrl.value);
     askNotifyPermission();
-    state.video.terminal = false;
-    if (noInfo) renderNoInfo(state.video.data.webpage_url);
-    setVideoPhase('downloading');
-    updateVideoProgress({ stage: 'starting', percent: 0 });
-    els.videoLive.textContent = 'Download started.';
+    state.video.starting = true;
     setButtonLoading(els.videoDownload, true, 'Starting…');
     setButtonLoading(els.videoErrorDownload, true, 'Starting…');
 
@@ -845,108 +818,173 @@
         body: { job_id: jobId, quality, subs },
         timeout: 60000,
       });
-      if (state.video.jobId !== jobId) return;
-      openVideoStream(jobId);
+      addDownloadRow({
+        id: jobId,
+        title: video.title || '',
+        url,
+        label: [label, subs ? `subtitles: ${subs}` : ''].filter(Boolean).join(' + '),
+      });
+      if (state.video.jobId === jobId) {   // still showing this video: clear it for the next link
+        els.videoUrl.value = '';
+        refreshClearButton(els.videoUrl, els.videoClear);
+        resetVideo();
+      }
+      toast('Download started. You can paste another link now.', 'success');
+      els.videoLive.textContent = 'Download started. You can paste another link now.';
     } catch (error) {
-      if (state.video.jobId !== jobId) return;
-      setVideoPhase(noInfo ? 'error' : 'ready');
+      if (state.video.jobId === jobId) toast(error.message || 'The download could not start.', 'error', 5200);
+    } finally {
+      state.video.starting = false;
       setButtonLoading(els.videoDownload, false);
       setButtonLoading(els.videoErrorDownload, false);
-      if (!noInfo) updateFormatHint();
-      toast(error.message || 'The download could not start.', 'error', 5200);
+      if (state.video.phase === 'ready') updateFormatHint();
     }
   }
 
-  function openVideoStream(jobId) {
-    closeVideoStream();
-    if (!('EventSource' in window)) {
-      pollVideoJob(jobId);
-      return;
-    }
-    const stream = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events`);
-    state.video.stream = stream;
-    stream.onmessage = (event) => {
-      let payload;
+  // ---------------------------------------------------------------------
+  // Downloads list: one row per started download, each with its own progress.
+  // The engine runs a few at a time; the others wait in its queue ("queued").
+  // ---------------------------------------------------------------------
+  const downloads = new Map();   // job id -> row
+  let downloadsTimer = null;
+  const ROW_STYLE = {
+    active: 'border-slate-200 bg-slate-50/80 dark:border-white/10 dark:bg-white/[0.035]',
+    done: 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-400/20 dark:bg-emerald-400/10',
+    error: 'border-rose-200 bg-rose-50/80 dark:border-rose-400/20 dark:bg-rose-400/10',
+  };
+
+  function addDownloadRow(info) {
+    const node = $('dlRowTemplate').content.firstElementChild.cloneNode(true);
+    const row = { ...info, node, finished: false, fails: 0, q: (name) => node.querySelector(`[data-${name}]`) };
+    row.q('title').textContent = info.title || 'Best quality download';
+    row.q('sub').textContent = [info.label, shortenHost(info.url)].filter(Boolean).join(' · ');
+    row.q('cancel').addEventListener('click', () => cancelDownload(row));
+    row.q('close').addEventListener('click', () => {
+      downloads.delete(row.id);
+      node.remove();
+      refreshDownloads();
+    });
+    row.q('retry').addEventListener('click', () => {
+      els.videoUrl.value = row.url;
+      refreshClearButton(els.videoUrl, els.videoClear);
+      els.videoUrl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      requestFetch(true);
+    });
+    node.className = `rounded-2xl border p-4 ${ROW_STYLE.active}`;
+    updateRowProgress(row, { stage: 'queued', percent: 0 });
+    downloads.set(row.id, row);
+    $('downloadsList').prepend(node);
+    window.fetchlyHelp?.watch?.(row.q('error-text'));   // adds "How to fix" and "Copy error details"
+    refreshDownloads();
+    pollDownloads();
+  }
+
+  function refreshDownloads() {
+    const rows = [...downloads.values()];
+    $('downloadsSection').hidden = rows.length === 0;
+    const active = rows.filter((row) => !row.finished);
+    const waiting = active.filter((row) => row.stage === 'queued').length;
+    const running = active.length - waiting;
+    const bits = [running ? `${running} running` : '', waiting ? `${waiting} waiting` : ''].filter(Boolean);
+    $('downloadsCount').textContent = bits.length ? `Downloads · ${bits.join(', ')}` : 'Downloads';
+  }
+
+  // One timer asks about all running rows (not one open stream each: browsers allow only a few per site).
+  async function pollDownloads() {
+    clearTimeout(downloadsTimer);
+    downloadsTimer = null;
+    const active = [...downloads.values()].filter((row) => !row.finished);
+    if (!active.length) return;
+    await Promise.all(active.map(async (row) => {
       try {
-        payload = JSON.parse(event.data);
-      } catch (_) {
-        return;
-      }
-      handleVideoJob(payload);
-    };
-    stream.onerror = () => {
-      if (state.video.terminal) return;
-      stream.close();
-      if (state.video.stream === stream) state.video.stream = null;
-      pollVideoJob(jobId);
-    };
-  }
-
-  function handleVideoJob(payload) {
-    if (!payload || !payload.state) return;
-    if (payload.state === 'downloading') {
-      setVideoPhase('downloading');
-      updateVideoProgress(payload.progress || {});
-    } else if (payload.state === 'complete') {
-      state.video.terminal = true;
-      closeVideoStream();
-      finishVideo(payload);
-    } else if (payload.state === 'error') {
-      state.video.terminal = true;
-      closeVideoStream();
-      showVideoError(payload.error || 'The download failed. Please try again.');
-    }
-  }
-
-  async function pollVideoJob(jobId) {
-    const token = ++state.video.pollToken;
-    const started = Date.now();
-    const tick = async () => {
-      if (token !== state.video.pollToken || state.video.terminal) return;
-      try {
-        const payload = await api(`/api/jobs/${encodeURIComponent(jobId)}`, { timeout: 20000 });
-        if (token !== state.video.pollToken || state.video.terminal) return;
-        handleVideoJob(payload);
-        if (!state.video.terminal && Date.now() - started < 30 * 60 * 1000) {
-          state.video.pollTimer = setTimeout(tick, 1500);
-        }
+        const payload = await api(`/api/jobs/${encodeURIComponent(row.id)}`, { timeout: 20000 });
+        row.fails = 0;
+        handleRowJob(row, payload);
       } catch (error) {
-        if (token !== state.video.pollToken || state.video.terminal) return;
-        if (Date.now() - started < 30 * 60 * 1000) {
-          state.video.pollTimer = setTimeout(tick, 2500);
-        } else {
-          showVideoError(error.message || 'Lost connection to the download.');
-        }
+        row.fails += 1;
+        if (error.status === 404 || row.fails > 40) endRow(row, 'error', error.message || 'Lost connection to the download.');
       }
-    };
-    tick();
+    }));
+    refreshDownloads();
+    if (!downloadsTimer && [...downloads.values()].some((row) => !row.finished)) {
+      downloadsTimer = setTimeout(pollDownloads, 1000);
+    }
   }
 
-  function finishVideo(payload) {
-    setVideoPhase('complete');
-    els.progressBar.style.width = '100%';
-    els.progressPercent.textContent = '100%';
-    els.progressTrack.setAttribute('aria-valuenow', '100');
-    const url = payload.download_url || `/api/download/${encodeURIComponent(state.video.jobId)}`;
-    els.downloadLink.href = url;
-    const name = payload.file_name || 'your file';
-    els.completeMeta.textContent = `${name} · available for 1 hour`;
-    els.videoLive.textContent = 'Download complete. Your file is ready.';
+  function handleRowJob(row, payload) {
+    if (!payload || row.finished) return;
+    if (payload.state === 'downloading') updateRowProgress(row, payload.progress || {});
+    else if (payload.state === 'complete') finishRow(row, payload);
+    else if (payload.state === 'error') endRow(row, 'error', payload.error || 'The download failed. Please try again.');
+    else if (payload.state === 'cancelled') endRow(row, 'cancelled');
+  }
 
-    if (state.video.autoDownloadedFor !== state.video.jobId) {
-      state.video.autoDownloadedFor = state.video.jobId;
-      triggerDownload(url);
-      toast('Download complete — your file is ready.', 'success');
-      const video = state.video.data || {};
-      const sent = state.video.sent || {};
-      addHistory({
-        id: state.video.jobId,
-        title: video.title || name.replace(/\.[a-z0-9]{2,5}$/i, ''),   // no details were read: use the file name
-        url: video.webpage_url || els.videoUrl.value.trim(),
-        label: [sent.label, sent.subs ? `subtitles: ${sent.subs}` : ''].filter(Boolean).join(' + '),
-      });
-      notifyDone('Download finished', name);
+  async function cancelDownload(row) {
+    const button = row.q('cancel');
+    button.disabled = true;
+    button.textContent = 'Cancelling…';
+    try {
+      handleRowJob(row, await api(`/api/video/${encodeURIComponent(row.id)}/cancel`, { method: 'POST', timeout: 20000 }));
+      refreshDownloads();
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Cancel';
+      toast(error.message || 'Could not cancel. Try again.', 'error');
     }
+  }
+
+  // Stop showing progress: 'error' (red, with Try again) or 'cancelled'.
+  function endRow(row, kind, message = '') {
+    row.finished = true;
+    row.q('progress').hidden = true;
+    row.q('cancel').hidden = true;
+    row.q('close').hidden = false;
+    if (kind === 'error') {
+      row.node.className = `rounded-2xl border p-4 ${ROW_STYLE.error}`;
+      row.q('error').hidden = false;
+      row.q('error-text').textContent = message;
+      els.videoLive.textContent = `Download failed: ${message}`;
+    } else {
+      row.q('stopped').hidden = false;
+      els.videoLive.textContent = 'Download cancelled.';
+      closeRowLater(row);
+    }
+    refreshDownloads();
+  }
+
+  // Finished and cancelled rows close by themselves after a while, to make room (errors stay: they need a look).
+  function closeRowLater(row) {
+    setTimeout(() => {
+      if (downloads.get(row.id) !== row) return;
+      downloads.delete(row.id);
+      row.node.remove();
+      refreshDownloads();
+    }, 10000);
+  }
+
+  function finishRow(row, payload) {
+    row.finished = true;
+    row.node.className = `rounded-2xl border p-4 ${ROW_STYLE.done}`;
+    row.q('progress').hidden = true;
+    row.q('cancel').hidden = true;
+    row.q('close').hidden = false;
+    row.q('done').hidden = false;
+    const url = payload.download_url || `/api/download/${encodeURIComponent(row.id)}`;
+    row.q('link').href = url;
+    const name = payload.file_name || 'your file';
+    row.q('meta').textContent = `${name} · ${state.health?.playlists ? 'saved to your Downloads folder' : 'available for 1 hour'}`;
+    els.videoLive.textContent = 'Download complete. Your file is ready.';
+    triggerDownload(url);
+    toast('Download complete — your file is ready.', 'success');
+    addHistory({
+      id: row.id,
+      title: row.title || name.replace(/\.[a-z0-9]{2,5}$/i, ''),   // no details were read: use the file name
+      url: row.url,
+      label: row.label,
+    });
+    notifyDone('Download finished', name);
+    refreshDownloads();
+    closeRowLater(row);
   }
 
   function triggerDownload(url) {
@@ -987,8 +1025,9 @@
       state.health = health;
       showToolVersions(health.yt_dlp?.version);
       els.ffmpegWarning.hidden = Boolean(health.ffmpeg?.available);
-      if (!health.ffmpeg?.available) {
-        els.ffmpegWarning.hidden = false;
+      if (health.playlists) {   // desktop app: files are saved on this computer, nothing is deleted after an hour
+        $('heroBadgeText').textContent = 'No sign-up · Saved to your Downloads folder';
+        $('footKeepText').textContent = 'Saved to Downloads';
       }
     } catch (_) {
       // Health is advisory; don't block the UI if it fails.
@@ -1036,7 +1075,7 @@
     notifyDone('Playlist finished', `${title} — ${summary}`);
   }
 
-  window.Fetchy = { api, toast, formatBytes, formatDuration, setVideoPhase, setButtonLoading, fetchButton: null, playlistFinished };
+  window.Fetchy = { api, toast, formatBytes, formatDuration, setVideoPhase, setButtonLoading, playlistFinished };
 
   init();
 })();

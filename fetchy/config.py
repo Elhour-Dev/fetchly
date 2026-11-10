@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 APP_NAME = "Fetchy"
-APP_VERSION = "1.2.6"   # keep equal to desktop/package.json and the git tag
+APP_VERSION = "1.3.1"   # keep equal to desktop/package.json and the git tag
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
@@ -45,6 +45,8 @@ DOWNLOAD_TTL_SECONDS = _env_int("DOWNLOAD_TTL_SECONDS", 60 * 60, minimum=60)
 CLEANUP_INTERVAL_SECONDS = _env_int("CLEANUP_INTERVAL_SECONDS", 10 * 60, minimum=30)
 MAX_PREVIEW_BYTES = _env_int("MAX_PREVIEW_BYTES", 20 * 1024 * 1024, minimum=1024)
 VIDEO_INFO_TIMEOUT_SECONDS = _env_int("VIDEO_INFO_TIMEOUT_SECONDS", 90, minimum=10)
+# Single videos downloading at the same time. More wait in a queue, so the computer does not slow down.
+MAX_PARALLEL_DOWNLOADS = _env_int("MAX_PARALLEL_DOWNLOADS", 3, minimum=1)
 MAX_REDIRECTS = 5
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = _env_int("PORT", 8001, minimum=1)

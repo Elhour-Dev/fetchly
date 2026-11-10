@@ -6,3 +6,8 @@
 -keep class org.apache.commons.compress.** { *; }
 -keep class org.tukaani.** { *; }
 -keep class org.apache.commons.io.** { *; }
+# No debug logs in the release app.
+-assumenosideeffects class android.util.Log {
+    public static int d(...);
+    public static int v(...);
+}

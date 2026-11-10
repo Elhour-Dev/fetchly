@@ -1,18 +1,14 @@
 package app.fetchly.android
 
 import android.app.Activity
-import android.app.Dialog
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.net.Uri
+import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
-import android.view.Window
 import android.widget.LinearLayout
 import kotlin.concurrent.thread
 
-/** Checks GitHub for a newer app version and offers the download link. Never blocks the app. */
+/** Checks GitHub for a newer app version (start screen). Never blocks the app for long. */
 object AppUpdate {
     private const val API = "https://api.github.com/repos/Elhour-Dev/fetchly/releases/latest"
 
@@ -33,7 +29,7 @@ object AppUpdate {
     /** Latest release, or null when offline / no answer. Call on a background thread. */
     fun latest(): Release? = try {
         val c = java.net.URL(API).openConnection() as java.net.HttpURLConnection
-        c.connectTimeout = 8000; c.readTimeout = 8000
+        c.connectTimeout = 5000; c.readTimeout = 5000
         c.setRequestProperty("Accept", "application/vnd.github+json")
         c.setRequestProperty("User-Agent", "Fetchy-Android")
         val body = if (c.responseCode == 200) c.inputStream.bufferedReader().use { it.readText() } else null
@@ -84,41 +80,55 @@ object AppUpdate {
     }
 }
 
-/** At every startup: if a newer release exists, show a pop-up. Silent on any failure. Never installs. */
-fun Activity.checkAppUpdate() {
-    thread {
-        val rel = AppUpdate.latest() ?: return@thread
-        val current = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "0" } catch (e: Exception) { "0" }
-        if (!AppUpdate.isNewer(rel.tag, current)) return@thread
-        runOnUiThread { showAppUpdateDialog(rel) }
+/**
+ * Start screen, shown before the main page once per app start: checks for a newer version.
+ * Update or Skip when there is one. No answer within a few seconds, offline or any error: goes on to the app ([onDone]).
+ */
+fun Activity.showStartScreen(onDone: () -> Unit) {
+    val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL or Gravity.CENTER_VERTICAL }
+    val scroll = page(box)
+    box.addView(android.widget.ImageView(this).apply { setImageResource(R.drawable.ic_logo) }, LinearLayout.LayoutParams(dp(64), dp(64)))
+    val title = label("Fetchy", 24f, bold = true).apply { gravity = Gravity.CENTER }
+    box.add(title, 14, -2)
+    val status = label("Checking for updates…", 15f, R.color.muted).apply { gravity = Gravity.CENTER }
+    box.add(status, 6, -2)
+    val spin = android.widget.ProgressBar(this).apply {
+        isIndeterminate = true
+        indeterminateTintList = android.content.res.ColorStateList.valueOf(col(R.color.accent))
     }
-}
+    box.add(spin, 18, dp(32), dp(32))
+    setContentView(scroll)
 
-private fun Activity.showAppUpdateDialog(rel: AppUpdate.Release) {
-    if (isFinishing || isDestroyed) return
-    val dlg = Dialog(this)
-    dlg.requestWindowFeature(Window.FEATURE_NO_TITLE)
-    val box = card(pad = 20)
-    val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    box.addView(label("New version ${rel.tag.removePrefix("v")}", 20f, bold = true))
-    if (rel.notes.isNotEmpty()) {
-        box.add(label("What's new", 15f, bold = true), 8)
-        val scroll = android.widget.ScrollView(this).apply { addView(label(rel.notes, 14f, R.color.muted)) }
-        box.add(scroll, 4, -1, dp(160))
-    } else box.add(label("A newer version of Fetchy is available. Download saves the app to your Downloads.", 15f, R.color.muted), 8)
-    box.add(buttons, 18)
-    fun add(v: View, top: Int) = buttons.add(v, top, -1, dp(48))
-    add(button("Download", Kind.PRIMARY) {
-        dlg.dismiss()
-        if (!downloadApk(rel)) try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(rel.url))) } catch (e: Exception) { /* no browser */ }
-    }, 0)
-    add(button("Later", Kind.GHOST) { dlg.dismiss() }, 8)
-    dlg.setContentView(box)
-    dlg.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-    dlg.show()
-    dlg.window?.setLayout(
-        (resources.displayMetrics.widthPixels - dp(40)).coerceAtMost(dp(400)), ViewGroup.LayoutParams.WRAP_CONTENT
-    )
+    var finished = false
+    val giveUp = Runnable { if (!finished) { finished = true; onDone() } }   // slow network: do not keep the user waiting
+    box.postDelayed(giveUp, 6000)
+    fun done() { if (!finished) { finished = true; box.removeCallbacks(giveUp); onDone() } }
+
+    thread {
+        val rel = AppUpdate.latest()
+        val current = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "0" } catch (e: Exception) { "0" }
+        runOnUiThread {
+            if (finished || isFinishing || isDestroyed) return@runOnUiThread
+            if (rel == null || !AppUpdate.isNewer(rel.tag, current)) { done(); return@runOnUiThread }
+            box.removeCallbacks(giveUp)
+            title.text = "New version ${rel.tag.removePrefix("v")}"
+            status.text = "Update now, or skip and use this version."
+            spin.visibility = View.GONE
+            val area = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            if (rel.notes.isNotEmpty()) {
+                val notes = card(pad = 12)
+                notes.addView(label("What's new", 15f, bold = true))
+                notes.add(android.widget.ScrollView(this).apply { addView(label(rel.notes, 14f, R.color.muted)) }, 4, -1, dp(150))
+                area.add(notes)
+            }
+            area.add(button("Update", Kind.PRIMARY) {
+                if (!downloadApk(rel)) try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(rel.url))) } catch (e: Exception) { /* no browser */ }
+                done()
+            }, 16, -1, dp(52))
+            area.add(button("Skip", Kind.GHOST) { done() }, 8, -1, dp(52))
+            box.add(area, 18, -1)
+        }
+    }
 }
 
 /** Downloads the .apk with the system download manager, then opens the installer by itself. False if not possible. */

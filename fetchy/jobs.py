@@ -15,7 +15,7 @@ from . import config
 from .config import logger
 from .utils import iso, utc_now
 
-TERMINAL_STATES = {"complete", "error"}
+TERMINAL_STATES = {"complete", "error", "cancelled"}
 _BUSY_STATES = {"downloading", "working", "fetching_info", "processing"}
 _ID_LENGTH = 36   # a job id is a UUID string
 
@@ -47,6 +47,7 @@ class Job:
     progress: dict[str, Any] = field(default_factory=_empty_progress)
     video: dict[str, Any] | None = None
     thumbnail_url: str | None = None
+    cancel_requested: bool = False   # the user pressed Cancel; the download stops at the next progress step
 
     def public_status(self) -> dict[str, Any]:
         return {
@@ -122,6 +123,33 @@ class JobStore:
             job.expires_at = now + timedelta(seconds=config.DOWNLOAD_TTL_SECONDS)
             job.updated_at = now
             return job
+
+    def cancel(self, job_id: str) -> Job | None:
+        """Ask a download to stop. A download still waiting in the queue stops at once."""
+        now = utc_now()
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job or job.state != "downloading":   # only a running or waiting download can be cancelled
+                return job
+            job.cancel_requested = True
+            if job.progress.get("stage") == "queued":
+                self._mark_cancelled(job, now)
+            return job
+
+    def mark_cancelled(self, job_id: str) -> None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job:
+                self._mark_cancelled(job, utc_now())
+
+    @staticmethod
+    def _mark_cancelled(job: Job, now: datetime) -> None:
+        job.state = "cancelled"
+        job.error = "Download cancelled."
+        job.completed_at = now
+        job.expires_at = now + timedelta(seconds=config.DOWNLOAD_TTL_SECONDS)
+        job.progress.update({"speed": None, "eta": None})
+        job.updated_at = now
 
     def status(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:

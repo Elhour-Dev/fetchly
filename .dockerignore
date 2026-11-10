@@ -21,6 +21,8 @@ cookies*.txt
 *.cookies
 .env
 .claude
+.mcp.json
+CLAUDE.md
 desktop
 android
 tests

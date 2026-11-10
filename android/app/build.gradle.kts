@@ -12,8 +12,8 @@ android {
         applicationId = "app.fetchly.android"
         minSdk = 29
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.2.6"
+        versionCode = 14
+        versionName = "1.3.1"
         ndk { abiFilters += "arm64-v8a" }   // phone only: arm64 (small APK)
     }
 
@@ -47,6 +47,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+
+    // English-only app with text built in code: no string resources to translate.
+    lint { disable += "SetTextI18n" }
 }
 
 dependencies {
