@@ -105,7 +105,7 @@ class MainActivity : ThemedActivity() {
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: android.text.Editable?) {
-                if (State.phase == State.Phase.ERROR) { State.phase = State.Phase.IDLE; State.text = ""; State.needsLogin = false; State.helpTopic = null; State.cookiesSaved = false; render() }   // a new link clears the old error
+                if (State.phase == State.Phase.ERROR || State.phase == State.Phase.DONE) { State.phase = State.Phase.IDLE; State.text = ""; State.needsLogin = false; State.helpTopic = null; State.cookiesSaved = false; render() }   // a new link clears the old error
                 url.removeCallbacks(loader); url.postDelayed(loader, 500) }
         })
 
@@ -161,7 +161,11 @@ class MainActivity : ThemedActivity() {
                 Tools.init(this)
                 ready = true
                 // Once per app start: offer an update if the tools are old. It only updates after a tap.
-                val offer = !State.startupChecked && Tools.updateOld(this) && !Tools.updateSnoozed(this)
+                // Not on the very first start: a new user should see the app, not a pop-up. A failing download still offers it.
+                val sp = getSharedPreferences("prefs", MODE_PRIVATE)
+                val firstRun = !sp.getBoolean("started_before", false)
+                if (firstRun) sp.edit().putBoolean("started_before", true).apply()
+                val offer = !firstRun && !State.startupChecked && Tools.updateOld(this) && !Tools.updateSnoozed(this)
                 State.startupChecked = true
                 runOnUiThread {
                     if (offer) showUpdateDialog(false) { startDownload() }
@@ -272,7 +276,8 @@ class MainActivity : ThemedActivity() {
         thread {
             var why = ""
             val res: Loaded? = try { Quality.fetch(this, link, "formats-$seq") } catch (e: Exception) {
-                why = Help.find((e.message ?: e.toString()).trim(), link)?.simple.orEmpty(); null }
+                val t = Help.find((e.message ?: e.toString()).trim(), link)
+                why = if (t?.id == "g_update" && Tools.recentlyUpdated(this)) "This site cannot be read right now." else t?.simple.orEmpty(); null }
             runOnUiThread {
                 if (seq != loadSeq) return@runOnUiThread
                 loading = false; slow = false; url.removeCallbacks(slowTimer)
@@ -429,7 +434,7 @@ class MainActivity : ThemedActivity() {
     private fun copyErrorDetails() {
         val link = urlRegex.find(url.text.toString())?.value?.substringBefore('?') ?: ""
         val text = buildString {
-            appendLine("Fetchy Android 1.0")
+            appendLine("Fetchy Android " + packageManager.getPackageInfo(packageName, 0).versionName)
             appendLine("yt-dlp: " + Tools.version(this@MainActivity))
             appendLine("Android " + Build.VERSION.RELEASE + ", " + Build.MANUFACTURER + " " + Build.MODEL)
             appendLine("Cookies saved: " + Tools.cookiesFile(this@MainActivity).exists())

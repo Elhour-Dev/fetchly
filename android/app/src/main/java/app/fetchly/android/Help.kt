@@ -18,7 +18,7 @@ object Help {
 
     private val yt = HelpCard("youtube", "YouTube", "Bot check, video unavailable", true, listOf(
         Problem("yt_bot", "\"Sign in to confirm you're not a bot\"",
-            "YouTube thinks this is a bot and blocked the download.", r("not a bot|confirm you.?re not"),
+            "YouTube thinks this is a bot and blocked the download.", r("not a bot|confirm you.?re not|http error 403"),
             "YouTube asks you to sign in to prove you are not a bot.",
             "YouTube blocks requests it does not trust. VPNs and busy networks make it worse.",
             listOf(
@@ -29,7 +29,7 @@ object Help {
             ), login = true, site = "youtube"),
         Problem("yt_unavail", "Video unavailable",
             "This video is private, removed, blocked in your country, or needs an adult account.",
-            r("video unavailable|age[- ]restrict|confirm your age|inappropriate|has been terminated|country|geo[- ]?(restrict|block)|your region|not available in your|blocked it in your"),
+            r("video (is )?unavailable|age[- ]restrict|confirm your age|inappropriate|has been terminated|country|geo[- ]?(restrict|block)|your region|not available in your|blocked it in your"),
             "\"Video unavailable\", \"Private video\" or \"not available in your country\".",
             "The owner hid or removed it, it is blocked where you are, or it needs a logged-in adult.",
             listOf(
@@ -97,14 +97,14 @@ object Help {
                 "Still broken? Reinstall Fetchy."
             )),
         Problem("g_network", "Slow or failed download",
-            "The connection failed or timed out.",
-            r("timed out|timeout|too long|connection|proxy|ssl|certificate|network|failed to fetch|unreachable|429|too many requests|temporar|resolve"),
-            "The download is very slow, stops, times out, or says \"too many requests\" (429).",
+            "The connection failed, timed out, or the site refused it.",
+            r("timed out|timeout|too long|connection|proxy|ssl|certificate|network|failed to fetch|unreachable|429|403|forbidden|too many requests|temporar|resolve"),
+            "The download is very slow, stops, times out, or says \"too many requests\" (429) or \"forbidden\" (403).",
             "Weak connection, a VPN, or the site is limiting you.",
             listOf(
                 "Check that Wi-Fi or mobile data works in your browser.",
                 "Turn off VPN and Private DNS, then tap \"Retry\".",
-                "\"Too many requests\": wait a few minutes.",
+                "\"Too many requests\" or \"forbidden\": wait a few minutes, then tap \"Retry\".",
                 "Try the other network (Wi-Fi or mobile data)."
             )),
         Problem("g_update", "Outdated tools",
@@ -126,7 +126,7 @@ object Help {
                 "Open Settings and tap \"Update tools\".",
                 "Log in or import cookies (see the Instagram or YouTube card).",
                 "Tap \"Retry\"."
-            )),
+            ), login = true),
         Problem("g_storage", "File not found in Downloads",
             "", null,
             "The box says Done, but you cannot find the video.",

@@ -41,6 +41,7 @@ class LoginActivity : ThemedActivity() {
         super.onCreate(savedInstanceState)
         val start = intent.getStringExtra("url") ?: "https://www.instagram.com/accounts/login/"
         base = Cookies.baseDomain(Cookies.hostOf(start))
+        if (base == "google.com" && start.contains("service=youtube")) base = "youtube.com"   // Google sign-in for YouTube: keep the YouTube cookies
         getSharedPreferences("prefs", MODE_PRIVATE).edit().putString("login_url", start).apply()
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -88,7 +89,7 @@ class LoginActivity : ThemedActivity() {
                 if (r.isForMainFrame) { log("load error ${e.errorCode} on " + safe(r.url.toString())); blocked() }
             }
             override fun onReceivedHttpError(v: WebView, r: WebResourceRequest, e: WebResourceResponse) {
-                if (r.isForMainFrame && e.statusCode >= 400) { log("HTTP ${e.statusCode} on " + safe(r.url.toString())); blocked() }
+                if (r.isForMainFrame && e.statusCode >= 400) { log("HTTP ${e.statusCode} on " + safe(r.url.toString())); blocked(e.statusCode == 429) }
             }
         }
         root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -102,9 +103,12 @@ class LoginActivity : ThemedActivity() {
     private fun safe(url: String) = try { val u = Uri.parse(url); (u.host ?: "?") + (u.path ?: "") } catch (_: Exception) { "?" }
 
     /** The site refused the login page. Not worked around. If the session cookie arrived anyway, this is not an error. */
-    private fun blocked() {
+    private fun blocked(tooMany: Boolean = false) {
         if (finished || Cookies.hasSession(Cookies.fromWebView(hosts, base), base) && Cookies.sessionNames(base) != null) return
-        noticeText.text = "This site did not open its login page inside the app. Fetchy does not work around that. " +
+        noticeText.text = if (tooMany)
+            "This site is limiting requests from your connection right now. Wait a while and try again, " +
+                "or use \"Import cookies.txt\" below."
+        else "This site did not open its login page inside the app. Fetchy does not work around that. " +
             "Tap Cancel, or use \"Import cookies.txt\" below."
         notice.visibility = View.VISIBLE
     }
