@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 import main
+from fetchy import config, engine, formats, jobs, playlist, urls, utils, video
+from fetchy.errors import FriendlyError, friendly_ytdlp_error
+from fetchy.web.security import is_local_request
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,52 +32,52 @@ def make_request(host: str, headers: dict[str, str] | None = None) -> Request:
     "http://exa mple.com/",
 ])
 def test_normalize_url_rejects_bad_urls(url):
-    with pytest.raises(main.FriendlyError):
-        main.normalize_url(url)
+    with pytest.raises(FriendlyError):
+        urls.normalize_url(url)
 
 
 def test_normalize_url_keeps_query_and_drops_fragment():
-    assert main.normalize_url(" https://Example.com/watch?v=1#t=3 ") == "https://example.com/watch?v=1"
+    assert urls.normalize_url(" https://Example.com/watch?v=1#t=3 ") == "https://example.com/watch?v=1"
 
 
 def test_private_ip_is_blocked():
-    with pytest.raises(main.FriendlyError):
-        main._host_is_public("10.0.0.1")
-    with pytest.raises(main.FriendlyError):
-        main._host_is_public("127.0.0.1")
+    with pytest.raises(FriendlyError):
+        urls.host_is_public("10.0.0.1")
+    with pytest.raises(FriendlyError):
+        urls.host_is_public("127.0.0.1")
 
 
 # --- Names and errors -------------------------------------------------------
 
 def test_sanitize_filename():
-    assert main.sanitize_filename('a/b:c*?.mp4', extension=".mp4") == "a b c.mp4"
-    assert main.sanitize_filename("CON", extension=".mp4") == "download-CON.mp4"
-    assert main.sanitize_filename("", fallback="video") == "video"
-    assert len(main.sanitize_filename("x" * 500, extension=".mp4", max_length=95)) == 95
+    assert utils.sanitize_filename('a/b:c*?.mp4', extension=".mp4") == "a b c.mp4"
+    assert utils.sanitize_filename("CON", extension=".mp4") == "download-CON.mp4"
+    assert utils.sanitize_filename("", fallback="video") == "video"
+    assert len(utils.sanitize_filename("x" * 500, extension=".mp4", max_length=95)) == 95
 
 
 def test_friendly_errors():
-    assert "HTTP 404" in main.friendly_ytdlp_error(Exception("ERROR: HTTP Error 404: Not Found"))
-    assert '"not found"' in main.friendly_ytdlp_error(Exception("HTTP Error 404"))
-    assert "private" in main.friendly_ytdlp_error(Exception("Private video")).lower()
-    assert main.friendly_ytdlp_error(Exception("")).startswith("Couldn't download")
+    assert "HTTP 404" in friendly_ytdlp_error(Exception("ERROR: HTTP Error 404: Not Found"))
+    assert '"not found"' in friendly_ytdlp_error(Exception("HTTP Error 404"))
+    assert "private" in friendly_ytdlp_error(Exception("Private video")).lower()
+    assert friendly_ytdlp_error(Exception("")).startswith("Couldn't download")
 
 
 # --- Qualities ----------------------------------------------------------------
 
 def test_format_selector():
-    assert main._format_selector("best") == "bestvideo*+bestaudio/best"
-    assert "height<=?720" in main._format_selector("720")
+    assert formats.format_selector("best") == "bestvideo*+bestaudio/best"
+    assert "height<=?720" in formats.format_selector("720")
     for bad in ("99", "99999", "worst", "720;rm"):
-        with pytest.raises(main.FriendlyError):
-            main._format_selector(bad)
+        with pytest.raises(FriendlyError):
+            formats.format_selector(bad)
 
 
 def test_audio_attempts_have_plain_fallback():
-    rich, plain = main._extra_ydl_attempts("audio-m4a", None, False)
+    rich, plain = formats.extra_attempts("audio-m4a", None, False)
     assert plain["postprocessors"][0]["preferredcodec"] == "m4a"
     assert any(pp["key"] == "FFmpegExtractAudio" for pp in rich["postprocessors"])
-    assert main._extra_ydl_attempts("720", None, False) == [{}]
+    assert formats.extra_attempts("720", None, False) == [{}]
 
 
 def test_build_format_options():
@@ -82,17 +85,17 @@ def test_build_format_options():
         {"format_id": "a", "vcodec": "none", "acodec": "mp4a", "filesize": 100},
         {"format_id": "v", "vcodec": "avc1", "acodec": "none", "height": 720, "filesize": 1000},
     ]}
-    keys = [o["key"] for o in main.build_format_options(info)]
+    keys = [o["key"] for o in formats.build_format_options(info)]
     assert keys == ["best", "720", "audio", "audio-m4a"]
 
 
 # --- Jobs and cleanup -------------------------------------------------------
 
 def test_cleanup_keeps_files_of_running_jobs(tmp_path, monkeypatch):
-    monkeypatch.setattr(main, "DOWNLOADS_DIR", tmp_path)
-    store = main.JobStore()
+    monkeypatch.setattr(config, "DOWNLOADS_DIR", tmp_path)
+    store = jobs.JobStore()
     running = store.create(kind="video", url="https://example.com/", state="downloading")
-    old = time.time() - main.DOWNLOAD_TTL_SECONDS - 60
+    old = time.time() - config.DOWNLOAD_TTL_SECONDS - 60
     keep = tmp_path / f"{running.id}.f137.mp4.part"
     stale = tmp_path / "11111111-1111-1111-1111-111111111111.mp4"
     for path in (keep, stale):
@@ -104,9 +107,9 @@ def test_cleanup_keeps_files_of_running_jobs(tmp_path, monkeypatch):
 
 
 def test_download_video_sync_completes(tmp_path, monkeypatch):
-    monkeypatch.setattr(main, "DOWNLOADS_DIR", tmp_path)
-    job = main.job_store.create(kind="video", url="https://example.com/v", state="downloading")
-    main.job_store.update(job.id, video={"title": "My: video", "formats": []})
+    monkeypatch.setattr(config, "DOWNLOADS_DIR", tmp_path)
+    job = jobs.job_store.create(kind="video", url="https://example.com/v", state="downloading")
+    jobs.job_store.update(job.id, video={"title": "My: video", "formats": []})
 
     class FakeYDL:
         def __init__(self, opts):
@@ -121,9 +124,9 @@ def test_download_video_sync_completes(tmp_path, monkeypatch):
         def download(self, urls):
             Path(self.opts["outtmpl"].replace("%(ext)s", "mp4")).write_bytes(b"video")
 
-    monkeypatch.setattr(main.yt_dlp, "YoutubeDL", FakeYDL)
-    main.download_video_sync(job.id, "best")
-    done = main.job_store.get(job.id)
+    monkeypatch.setattr(engine.yt_dlp, "YoutubeDL", FakeYDL)
+    video.download_video_sync(job.id, "best")
+    done = jobs.job_store.get(job.id)
     assert done.state == "complete"
     assert done.download_name == "My video.mp4"
 
@@ -131,10 +134,10 @@ def test_download_video_sync_completes(tmp_path, monkeypatch):
 # --- Local-only checks ------------------------------------------------------
 
 def test_local_request_rules():
-    assert main._is_local_request(make_request("127.0.0.1"))
-    assert not main._is_local_request(make_request("8.8.8.8"))
+    assert is_local_request(make_request("127.0.0.1"))
+    assert not is_local_request(make_request("8.8.8.8"))
     # A proxied request could fake its address, so it never counts as local.
-    assert not main._is_local_request(make_request("127.0.0.1", {"X-Forwarded-For": "127.0.0.1"}))
+    assert not is_local_request(make_request("127.0.0.1", {"X-Forwarded-For": "127.0.0.1"}))
 
 
 def test_playlist_audio_m4a_extracts_audio(tmp_path, monkeypatch):
@@ -153,8 +156,8 @@ def test_playlist_audio_m4a_extracts_audio(tmp_path, monkeypatch):
         def extract_info(self, url, download):
             return {}
 
-    monkeypatch.setattr(main.yt_dlp, "YoutubeDL", FakeYDL)
-    run = main.PlaylistRun("List", {1: {"n": 1, "url": "https://example.com/1", "key": "", "title": "One",
+    monkeypatch.setattr(engine.yt_dlp, "YoutubeDL", FakeYDL)
+    run = playlist.PlaylistRun("List", {1: {"n": 1, "url": "https://example.com/1", "key": "", "title": "One",
                                         "unavailable": None}})
     run.quality = "audio-m4a"
     run.folder = tmp_path
@@ -198,3 +201,30 @@ def test_video_info_rejects_private_url(client):
     r = client.post("/api/video/info", json={"url": "http://127.0.0.1/x.mp4"})
     assert r.status_code == 400
     assert r.json()["error"] == "blocked_url"
+
+
+# --- Cookies ------------------------------------------------------------------
+
+def test_cookies_browser_and_file(tmp_path, monkeypatch):
+    from fetchy import cookies
+
+    monkeypatch.setattr(config, "COOKIES_FILE", tmp_path / "cookies.txt")
+    with pytest.raises(FriendlyError):
+        cookies.set_browser("netscape")
+    with pytest.raises(FriendlyError):
+        cookies.save_file("not a cookie file")
+
+    cookies.save_file(".example.com\tTRUE\t/\tTRUE\t0\tname\tvalue\r\n")
+    assert cookies.ydl_options() == {"cookiefile": str(tmp_path / "cookies.txt")}
+    cookies.set_browser(" Firefox ")
+    assert cookies.ydl_options() == {"cookiesfrombrowser": ("firefox",)}
+    cookies.clear()
+    assert cookies.status() == {"browser": "", "file": False}
+
+
+def test_single_video_options_use_youtube_clients():
+    from fetchy.ydl_options import single_video_options
+
+    a, b = single_video_options(), single_video_options()
+    assert a["extractor_args"]["youtube"]["player_client"][0] == "android"
+    assert a["extractor_args"] is not b["extractor_args"]   # fresh dict each time

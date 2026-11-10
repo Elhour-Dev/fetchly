@@ -21,6 +21,7 @@
     "files": ["main.js", "update.js", "package.json", "assets/icon.ico"],
     "extraResources": [
       { "from": "../main.py", "to": "app/main.py" },
+      { "from": "../fetchy", "to": "app/fetchy", "filter": ["**/*.py"] },
       { "from": "../THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
       { "from": "../templates", "to": "app/templates" },
       { "from": "../static", "to": "app/static" },
