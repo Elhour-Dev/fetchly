@@ -117,6 +117,7 @@ class DownloadService : Service() {
                     }
                 }
                 addOption("--no-mtime")
+                addOption("--socket-timeout", "60")
                 addOption("--trim-filenames", "120")
                 addOption("-o", dir.absolutePath + (if (playlist) "/%(playlist_index)03d - %(title).70s [%(id)s].%(ext)s" else "/%(title).80s [%(id)s].%(ext)s"))
                 val c = Tools.cookiesFile(this@DownloadService)

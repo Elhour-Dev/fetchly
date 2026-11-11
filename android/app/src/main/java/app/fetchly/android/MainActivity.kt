@@ -556,8 +556,8 @@ class MainActivity : ThemedActivity() {
             }
             show(sub, sub.text.isNotEmpty())
             show(logIn, login); show(retryBtn, retryMode)
-            show(fix, err && !login && d.helpTopic != null)
-            show(copy, err && !login)
+            show(fix, err && d.helpTopic != null && (!login || loggedInNow(d)))
+            show(copy, err)   // always on an error, also when a login is asked (so a failed login can be reported)
             close.text = if (login) "Cancel" else "Close"
             show(close, p == Dl.Phase.DONE || err)
         }
@@ -570,6 +570,11 @@ class MainActivity : ThemedActivity() {
 
     private fun openHelp(topic: String?) =
         startActivity(Intent(this, HelpActivity::class.java).putExtra("topic", topic))
+
+    private fun loggedInNow(d: Dl): Boolean {
+        val base = Cookies.baseDomain(Cookies.hostOf(d.url))
+        return Cookies.sessionNames(base) != null && Cookies.savedHasSession(this, base)
+    }
 
     private fun copyErrorDetails(d: Dl) {
         val link = d.url.substringBefore('?')

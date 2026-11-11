@@ -66,6 +66,7 @@ object Quality {
         infoFile(ctx).delete()
         val req = YoutubeDLRequest(link).apply {
             addOption("--no-playlist")
+            addOption("--socket-timeout", "60")   // Instagram can take 10-20 s to answer; the default 20 s fails on slow networks
             addOption("-J")
             val c = Tools.cookiesFile(ctx)
             if (c.exists()) addOption("--cookies", c.absolutePath)
