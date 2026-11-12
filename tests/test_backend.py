@@ -245,6 +245,8 @@ def test_cookies_browser_and_file(tmp_path, monkeypatch):
     from fetchy import cookies
 
     monkeypatch.setattr(config, "COOKIES_FILE", tmp_path / "cookies.txt")
+    monkeypatch.setattr(cookies, "_can_read", lambda name: True)
+    cookies._check_cache.clear()
     with pytest.raises(FriendlyError):
         cookies.set_browser("netscape")
     with pytest.raises(FriendlyError):
@@ -256,6 +258,38 @@ def test_cookies_browser_and_file(tmp_path, monkeypatch):
     assert cookies.ydl_options() == {"cookiesfrombrowser": ("firefox",)}
     cookies.clear()
     assert cookies.status() == {"browser": "", "file": False}
+
+
+def test_unreadable_browser_is_refused_and_not_stored(tmp_path, monkeypatch):
+    from fetchy import cookies
+
+    monkeypatch.setattr(config, "COOKIES_FILE", tmp_path / "cookies.txt")
+    cookies.clear()
+    cookies._check_cache.clear()
+    monkeypatch.setattr(cookies, "_can_read", lambda name: False)
+    with pytest.raises(FriendlyError) as err:
+        cookies.set_browser("chrome")
+    assert err.value.code == "browser_cookies_unreadable"
+    assert "Chrome" in err.value.message
+    assert cookies.browser() == ""
+
+
+def test_browser_that_becomes_unreadable_falls_back(tmp_path, monkeypatch):
+    from fetchy import cookies
+
+    monkeypatch.setattr(config, "COOKIES_FILE", tmp_path / "cookies.txt")
+    cookies.clear()
+    cookies._check_cache.clear()
+    monkeypatch.setattr(cookies, "_can_read", lambda name: True)
+    cookies.set_browser("chrome")
+    assert cookies.ydl_options() == {"cookiesfrombrowser": ("chrome",)}
+    # Chrome gets locked later: downloads must not break.
+    cookies._check_cache.clear()
+    monkeypatch.setattr(cookies, "_can_read", lambda name: False)
+    assert cookies.ydl_options() == {}
+    cookies.save_file(".example.com\tTRUE\t/\tTRUE\t0\tname\tvalue\n")
+    assert cookies.ydl_options() == {"cookiefile": str(tmp_path / "cookies.txt")}
+    cookies.clear()
 
 
 def test_single_video_options_use_youtube_clients():

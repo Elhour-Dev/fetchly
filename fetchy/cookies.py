@@ -9,6 +9,7 @@ import base64
 import contextlib
 import os
 import threading
+import time
 
 from . import config
 from .config import logger
@@ -19,10 +20,37 @@ BROWSERS = {"firefox", "chrome", "edge", "brave", "opera", "chromium", "vivaldi"
 _browser = config.COOKIES_BROWSER
 _warning_lock = threading.Lock()
 _warning_emitted = False
+_unreadable_warned: set[str] = set()
+_check_lock = threading.Lock()
+_check_cache: dict[str, tuple[float, bool]] = {}
 
 
 def browser() -> str:
     return _browser
+
+
+def _can_read(name: str) -> bool:
+    """True when yt-dlp can read this browser's cookies right now (Chrome locks them while it is open)."""
+    try:
+        from yt_dlp.cookies import extract_cookies_from_browser
+
+        extract_cookies_from_browser(name)
+        return True
+    except Exception:
+        return False
+
+
+def _still_readable(name: str) -> bool:
+    """Same check, remembered for a minute so downloads do not repeat it."""
+    now = time.monotonic()
+    with _check_lock:
+        hit = _check_cache.get(name)
+        if hit and now - hit[0] < 60:
+            return hit[1]
+    ok = _can_read(name)
+    with _check_lock:
+        _check_cache[name] = (now, ok)
+    return ok
 
 
 def set_browser(name: str) -> None:
@@ -30,6 +58,15 @@ def set_browser(name: str) -> None:
     name = name.strip().lower()
     if name not in BROWSERS:
         raise FriendlyError("Pick a browser from the list.", 400, "bad_browser")
+    if not _can_read(name):
+        raise FriendlyError(
+            f"Fetchy cannot read {name.capitalize()}'s cookies. If {name.capitalize()} is open, close it and try again. "
+            "Firefox works best, or upload a cookies.txt file.",
+            400,
+            "browser_cookies_unreadable",
+        )
+    with _check_lock:
+        _check_cache[name] = (time.monotonic(), True)
     _browser = name
 
 
@@ -83,9 +120,15 @@ def materialize_from_env() -> None:
 def ydl_options() -> dict[str, object]:
     """yt-dlp cookie options, or an empty dict when there are no cookies."""
     global _warning_emitted
-    # A browser you picked wins over cookies.txt.
+    # A browser you picked wins over cookies.txt, unless it can no longer be read (then a broken browser
+    # must not break every download: use cookies.txt, or none).
     if _browser:
-        return {"cookiesfrombrowser": (_browser,)}
+        if _still_readable(_browser):
+            return {"cookiesfrombrowser": (_browser,)}
+        with _warning_lock:
+            if _browser not in _unreadable_warned:
+                _unreadable_warned.add(_browser)
+                logger.warning("Cannot read %s cookies right now. Continuing without them.", _browser)
     if has_file():
         return {"cookiefile": str(config.COOKIES_FILE)}
     with _warning_lock:

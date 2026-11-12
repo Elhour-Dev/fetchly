@@ -24,7 +24,7 @@
     {
       id: 'login', title: 'Log in to YouTube or Instagram', cookies: true,
       steps: ['Log in to the site in Firefox on this computer.', 'Below, pick Firefox and click "Use browser cookies".', 'Paste the link again, or click "Try again".'],
-      note: 'Chrome and Edge often cannot share their cookies. Firefox works best. You can also upload a cookies.txt file. ' + TIP + ' ' + COOKIE_NOTE
+      note: 'Chrome and Edge often cannot share their cookies (close the browser first). Firefox works best. You can also upload a cookies.txt file. ' + TIP + ' ' + COOKIE_NOTE
     },
     {
       id: 'find', title: 'Find your videos',
@@ -41,6 +41,12 @@
   // One problem, one section: the title is what you see, why is one plain sentence, fix are short steps.
   // match: regex on the error text (picks the "How to fix" link).
   var PROBLEMS = [
+    {
+      id: 'g_browser_cookies', title: '"Could not copy cookie database" (Edge, Chrome, Brave)',
+      match: /cookie database|decrypt|dpapi|cannot read .{0,20}cookies/i,
+      why: 'Edge, Chrome and Brave lock their cookies while they are open, and newer versions hide them from other programs. The message says "Chrome" even for Edge.',
+      fix: ['Close the browser completely, then click "Try again".', 'Or log in with Firefox and pick Firefox in the Cookies box below.', 'Or upload a cookies.txt file, or click "Remove cookies" to go on without a login.']
+    },
     {
       id: 'yt_bot', title: 'YouTube: "Sign in to confirm you\'re not a bot"',
       match: /not a bot|confirm you.?re not/i,
@@ -104,7 +110,7 @@
   ];
 
   // Order matters: the first match wins.
-  var ORDER = ['yt_bot', 'g_format', 'g_ffmpeg', 'yt_unavail', 'g_unsupported', 'ig_private', 'ig_empty', 'ig_login', 'g_update', 'g_network'];
+  var ORDER = ['g_browser_cookies', 'yt_bot', 'g_format', 'g_ffmpeg', 'yt_unavail', 'g_unsupported', 'ig_private', 'ig_empty', 'ig_login', 'g_update', 'g_network'];
 
   function problemById(id) {
     for (var i = 0; i < PROBLEMS.length; i++) if (PROBLEMS[i].id === id) return PROBLEMS[i];
@@ -318,6 +324,9 @@
     ['firefox', 'chrome', 'edge', 'brave', 'opera', 'chromium', 'vivaldi'].forEach(function (b) {
       sel.appendChild(el('option', { value: b, text: b === 'firefox' ? 'Firefox (best)' : b.charAt(0).toUpperCase() + b.slice(1) }));
     });
+    var hint = el('p', { 'class': 'fhStatus', text: '' });
+    function showHint() { hint.textContent = /^(chrome|edge|brave|chromium|opera|vivaldi)$/.test(sel.value) ? 'Close this browser first. Firefox works best.' : ''; }
+    sel.addEventListener('change', showHint);
     var useBtn = el('button', { type: 'button', 'class': 'fhBtn primary', text: 'Use browser cookies' });
     var file = el('input', { type: 'file', accept: '.txt,text/plain', 'aria-label': 'cookies.txt file' });
     var upBtn = el('button', { type: 'button', 'class': 'fhBtn', text: 'Upload cookies.txt' });
@@ -338,6 +347,7 @@
     });
     refreshCookies = function () { api('GET', '/api/cookies').then(show, fail); };
     wrap.appendChild(el('div', { 'class': 'fhRow' }, [sel, useBtn]));
+    wrap.appendChild(hint);
     wrap.appendChild(el('div', { 'class': 'fhRow' }, [file, upBtn]));
     wrap.appendChild(el('div', { 'class': 'fhRow' }, [clrBtn]));
     wrap.appendChild(status);
