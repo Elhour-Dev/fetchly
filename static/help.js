@@ -242,9 +242,9 @@
     buildAsk();
   }
 
-  // ---- "Log in to YouTube first?" Asked once, for the first YouTube link while no login is set up ----
-  var ASKED_KEY = 'fetchly-yt-login-asked', YT_HOST = /(^|\.)(youtube\.com|youtu\.be)$/i;
-  var askCont = null, askBusy = false, noCookieApi = false;
+  // ---- "Log in to YouTube first?" Asked for a YouTube link while no login is set up (once per link) ----
+  var YT_HOST = /(^|\.)(youtube\.com|youtu\.be)$/i;
+  var askCont = null, askBusy = false, noCookieApi = false, askedLink = '';
 
   function buildAsk() {
     var yes = el('button', { type: 'button', 'class': 'fhBtn primary', text: 'Log in' });
@@ -277,14 +277,14 @@
     var host = '';
     try { host = new URL(url).hostname; } catch (e) { return false; }
     if (noCookieApi || !YT_HOST.test(host)) return false;
-    try { if (localStorage.getItem(ASKED_KEY)) return false; } catch (e) { return false; }
+    if (url === askedLink) return false;   // already asked for this link
     askCont = cont;   // a newer link replaces the waiting one
     if (askBusy || ask.classList.contains('open')) return true;
     askBusy = true;
     api('GET', '/api/cookies').then(function (j) {
       askBusy = false;
       if (j.file || j.browser) { closeAsk(true); return; }   // a login is already set up
-      try { localStorage.setItem(ASKED_KEY, '1'); } catch (e) {}
+      askedLink = url;
       ask.classList.add('open');
       ask.querySelector('.primary').focus();
     }, function () {   // no login settings here (for example the web version): just go on

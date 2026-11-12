@@ -40,6 +40,7 @@ class MainActivity : ThemedActivity() {
     private var loading = false
     private var failed = false
     private var failWhy = ""   // short reason the qualities could not be loaded (from the help topics)
+    private var ytAskedLink = ""   // the YouTube link the login question was already shown for
     private var notSupported = ""   // "Not supported: ..." for an Instagram story or a Snapchat link
     private var loadSeq = 0
     private var loaded: Loaded? = null   // title, length and picture of the checked video
@@ -273,6 +274,7 @@ class MainActivity : ThemedActivity() {
     private fun loadQualities() {
         if (starting) return   // runs again when the main page shows
         val link = urlRegex.find(url.text.toString())?.value
+        if (link == null) ytAskedLink = ""   // the field was cleared: the same link may ask again
         notSupported = link?.let { Links.unsupported(it) }.orEmpty()
         if (notSupported.isNotEmpty()) {   // say it at once, no check and no Download button
             cancelLoad(); loadedLink = null; options = null; failed = false; renderQuality(); return
@@ -360,9 +362,9 @@ class MainActivity : ThemedActivity() {
     private fun askYoutubeLogin(link: String): Boolean {
         val base = Cookies.baseDomain(Cookies.hostOf(link))
         if (base != "youtube.com" && base != "youtu.be") return false
-        val sp = getSharedPreferences("prefs", MODE_PRIVATE)
-        if (sp.getBoolean("yt_login_asked", false) || Cookies.savedHasSession(this, "youtube.com")) return false
-        sp.edit().putBoolean("yt_login_asked", true).apply()
+        // Asked for every YouTube link while no YouTube login is saved, but only once per link (not again after "Not now").
+        if (link == ytAskedLink || Cookies.savedHasSession(this, "youtube.com")) return false
+        ytAskedLink = link
         val dlg = android.app.Dialog(this)
         dlg.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         val box = card(pad = 20)

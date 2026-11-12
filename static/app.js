@@ -709,7 +709,7 @@
 
   async function handleVideoSubmit(event) {
     event.preventDefault();
-    // First YouTube link without a login: ask first (static/help.js, only once). The fetch goes on after the answer.
+    // YouTube link without a login: ask first (static/help.js, once per link). The fetch goes on after the answer.
     const link = normalizeUrlInput(els.videoUrl.value);
     if (!event.loginAsked && !validateUrl(link) &&
         window.fetchlyHelp?.askLogin(link, () => handleVideoSubmit({ preventDefault() {}, loginAsked: true }))) return;
