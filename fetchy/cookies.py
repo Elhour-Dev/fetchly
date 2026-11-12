@@ -60,8 +60,8 @@ def set_browser(name: str) -> None:
         raise FriendlyError("Pick a browser from the list.", 400, "bad_browser")
     if not _can_read(name):
         raise FriendlyError(
-            f"Fetchy cannot read {name.capitalize()}'s cookies. If {name.capitalize()} is open, close it and try again. "
-            "Firefox works best, or upload a cookies.txt file.",
+            f"Fetchy cannot read {name.capitalize()}'s cookies. {name.capitalize()} locks them while it is open, and newer "
+            "versions block other programs even when it is closed. Use Firefox, or upload a cookies.txt file.",
             400,
             "browser_cookies_unreadable",
         )

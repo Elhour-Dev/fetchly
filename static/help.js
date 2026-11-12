@@ -45,7 +45,7 @@
       id: 'g_browser_cookies', title: '"Could not copy cookie database" (Edge, Chrome, Brave)',
       match: /cookie database|decrypt|dpapi|cannot read .{0,20}cookies/i,
       why: 'Edge, Chrome and Brave lock their cookies while they are open, and newer versions hide them from other programs. The message says "Chrome" even for Edge.',
-      fix: ['Close the browser completely, then click "Try again".', 'Or log in with Firefox and pick Firefox in the Cookies box below.', 'Or upload a cookies.txt file, or click "Remove cookies" to go on without a login.']
+      fix: ['Best: log in with Firefox and pick Firefox in the Cookies box below.', 'Or upload a cookies.txt file.', 'Or click "Remove cookies" to go on without a login, then "Try again".']
     },
     {
       id: 'yt_bot', title: 'YouTube: "Sign in to confirm you\'re not a bot"',
@@ -140,7 +140,7 @@
     '.fhHead{position:sticky;top:0;z-index:1;display:flex;align-items:flex-start;gap:12px;padding:20px 20px 14px;background:var(--bg);border-bottom:1px solid var(--border)}' +
     '.fhHead h2{margin:0;font-size:22px;line-height:1.2;font-weight:700;letter-spacing:-.01em}' +
     '.fhHead p{margin:4px 0 0;color:var(--muted);font-size:13.5px}' +
-    '.fhX{margin-left:auto;flex:none;width:36px;height:36px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}' +
+    '.fhX{margin-inline-start:auto;flex:none;width:36px;height:36px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}' +
     '.fhX:hover{color:var(--text)}' +
     '.fhBody{padding:16px 20px 20px;display:flex;flex-direction:column;gap:8px}' +
     '.fhGroup{margin:10px 0 2px;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}' +
@@ -148,14 +148,14 @@
     '.fhCard{border:1px solid var(--border);border-radius:16px;background:var(--card);overflow:hidden}' +
     '.fhCard{scroll-margin-top:96px}' +
     '.fhCard.open{border-color:var(--accent)}' +
-    '.fhCardHead{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}' +
+    '.fhCardHead{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;background:none;border:0;color:inherit;font:inherit;text-align:start;cursor:pointer}' +
     '.fhCardHead:focus-visible,.fhX:focus-visible,.fhBtn:focus-visible,.fhLink:focus-visible,.fhAskBox .fhBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}' +
     '.fhCardTitle{display:block;font-size:15px;font-weight:700}' +
-    '.fhChev{margin-left:auto;flex:none;color:var(--muted);transition:transform .15s}' +
+    '.fhChev{margin-inline-start:auto;flex:none;color:var(--muted);transition:transform .15s}' +
     '.fhCard.open .fhChev{transform:rotate(180deg)}' +
     '.fhCardBody{padding:0 16px 16px}' +
     '.fhWhy{margin:0;color:var(--muted)}' +
-    '.fhCardBody ol{margin:6px 0 0;padding-left:22px;list-style:decimal}.fhCardBody li{margin:3px 0;display:list-item}' +
+    '.fhCardBody ol{margin:6px 0 0;padding-inline-start:22px;list-style:decimal}.fhCardBody li{margin:3px 0;display:list-item}' +
     '.fhCardBody[hidden]{display:none}' +
     '.fhTip{background:var(--tipBg);border:1px solid var(--tipBorder);color:var(--tipText);border-radius:12px;padding:10px 12px;font-size:13px;margin-top:12px}' +
     '.fhCard.flash{animation:fhFlash 1.4s ease-out}' +
@@ -171,8 +171,13 @@
     'html.dark .fhBtn.primary{color:#0b101c}' +
     '.fhStatus{margin-top:10px!important;font-size:12.5px!important}' +
     '.fhFoot{display:flex;gap:8px;flex-wrap:wrap}' +
-    '.fhLink{margin-left:8px;font-size:12.5px;font-weight:600;text-decoration:underline;cursor:pointer;background:none;border:0;color:#4f46e5;padding:0}' +
-    'html.dark .fhLink{color:#a5b4fc}' +
+    '.fhHolder{display:flex;align-items:center;gap:8px;margin-top:10px}' +
+    '.fhHolder:empty{display:none}' +
+    '.fhLink{font-size:12px;font-weight:600;cursor:pointer;border:0;border-radius:8px;padding:6px 12px;background:#eef2ff;color:#4338ca}' +
+    '.fhLink:hover{background:#e0e7ff}' +
+    '.fhLink.fhGhost{margin-inline-start:auto;background:none;color:#64748b}.fhLink.fhGhost:hover{background:rgba(100,116,139,.12)}' +
+    'html.dark .fhLink{background:rgba(99,102,241,.15);color:#c7d2fe}html.dark .fhLink:hover{background:rgba(99,102,241,.25)}' +
+    'html.dark .fhLink.fhGhost{background:none;color:#94a3b8}html.dark .fhLink.fhGhost:hover{background:rgba(255,255,255,.08)}' +
     '@media (max-width:520px){#fhOverlay{padding:0}#fhBox{max-height:100vh;border-radius:0;height:100%}}';
 
   function el(tag, props, kids) {
@@ -256,6 +261,14 @@
     var yes = el('button', { type: 'button', 'class': 'fhBtn primary', text: 'Log in' });
     var no = el('button', { type: 'button', 'class': 'fhBtn', text: 'Not now' });
     yes.addEventListener('click', function () {
+      if (window.fetchyDesktop && window.fetchyDesktop.youtubeLogin) {   // the app: log in inside a window, then retry
+        yes.disabled = true;
+        window.fetchyDesktop.youtubeLogin().then(function (text) {
+          if (!text) return;
+          return api('DELETE', '/api/cookies').then(function () { return api('POST', '/api/cookies/file', { text: text }); });
+        }).catch(function () {}).then(function () { yes.disabled = false; closeAsk(true); });
+        return;
+      }
       afterClose = askCont; askCont = null;   // the link goes on when Help closes
       closeAsk(false);
       openHelp('login');
@@ -325,7 +338,7 @@
       sel.appendChild(el('option', { value: b, text: b === 'firefox' ? 'Firefox (best)' : b.charAt(0).toUpperCase() + b.slice(1) }));
     });
     var hint = el('p', { 'class': 'fhStatus', text: '' });
-    function showHint() { hint.textContent = /^(chrome|edge|brave|chromium|opera|vivaldi)$/.test(sel.value) ? 'Close this browser first. Firefox works best.' : ''; }
+    function showHint() { hint.textContent = /^(chrome|edge|brave|chromium|opera|vivaldi)$/.test(sel.value) ? 'Newer versions of this browser block this, even when it is closed. Firefox works best.' : ''; }
     sel.addEventListener('change', showHint);
     var useBtn = el('button', { type: 'button', 'class': 'fhBtn primary', text: 'Use browser cookies' });
     var file = el('input', { type: 'file', accept: '.txt,text/plain', 'aria-label': 'cookies.txt file' });
@@ -418,10 +431,10 @@
   function watch(textId) {
     var node = typeof textId === 'string' ? document.getElementById(textId) : textId;   // an id, or the element itself
     if (!node || !node.parentNode) return;
-    var holder = el('span', { 'class': 'fhHolder' });
+    var holder = el('div', { 'class': 'fhHolder' });
     node.parentNode.insertBefore(holder, node.nextSibling);
     function refresh() {
-      var msg = node.textContent.trim();
+      var msg = (window.i18n ? window.i18n.orig(node) : node.textContent).trim();   // English text, even when the page is translated
       holder.textContent = '';
       if (!msg || /^Not supported:/.test(msg)) return;   // nothing to fix for a site Fetchy cannot download from
       lastError = msg;
@@ -431,7 +444,7 @@
         a.addEventListener('click', function () { openHelp(id); });
         holder.appendChild(a);
       }
-      var c = el('button', { type: 'button', 'class': 'fhLink', text: 'Copy error details' });
+      var c = el('button', { type: 'button', 'class': 'fhLink fhGhost', text: 'Copy error details' });
       c.addEventListener('click', function () { copyDetails(c, msg); });
       holder.appendChild(c);
     }

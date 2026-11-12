@@ -982,7 +982,7 @@
       url: row.url,
       label: row.label,
     });
-    notifyDone('Download finished', name);
+    notifyDone((window.i18n ? window.i18n.t('Download finished') : 'Download finished'), name);
     refreshDownloads();
     closeRowLater(row);
   }
@@ -1072,7 +1072,7 @@
   // A finished playlist is recorded and announced like a single video (see playlist.js).
   function playlistFinished(title, url, summary) {
     addHistory({ id: `pl-${Date.now()}`, title, url, label: `Playlist · ${summary}` });
-    notifyDone('Playlist finished', `${title} — ${summary}`);
+    notifyDone((window.i18n ? window.i18n.t('Playlist finished') : 'Playlist finished'), `${title} — ${summary}`);
   }
 
   window.Fetchy = { api, toast, formatBytes, formatDuration, setVideoPhase, setButtonLoading, playlistFinished };

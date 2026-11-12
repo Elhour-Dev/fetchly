@@ -14,21 +14,21 @@ class HelpActivity : ThemedActivity() {
         super.onCreate(savedInstanceState)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = page(box)
-        box.add(topBar("Help"))
-        box.add(label("Tap a topic to open it.", 15f, R.color.muted), 14)
+        box.add(topBar(getString(R.string.common_help)))
+        box.add(label(getString(R.string.help_tap_topic), 15f, R.color.muted), 14)
 
         val want = intent.getStringExtra("topic")
         var target: View? = null
 
-        box.add(label("How to", 13f, R.color.muted, bold = true), 20)
+        box.add(label(getString(R.string.help_how_to), 13f, R.color.muted, bold = true), 20)
         for (g in Help.guides) {
-            val s = section(g.title, g.steps, null, g.note, g.id == want)
+            val s = section(getString(g.title), resources.getStringArray(g.steps).toList(), null, g.note?.let { getString(it) }, g.id == want)
             box.add(s, 8)
             if (g.id == want) target = s
         }
-        box.add(label("Fix a problem", 13f, R.color.muted, bold = true), 24)
+        box.add(label(getString(R.string.help_fix_problem), 13f, R.color.muted, bold = true), 24)
         for (p in Help.problems) {
-            val s = section(p.title, p.fix, p.why, null, p.id == want)
+            val s = section(getString(p.title), resources.getStringArray(p.fix).toList(), getString(p.why), null, p.id == want)
             box.add(s, 8)
             if (p.id == want) target = s
         }

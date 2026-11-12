@@ -56,8 +56,8 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStart = startId
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW))
-        nm.createNotificationChannel(NotificationChannel(DONE_CHANNEL, "Finished downloads", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.common_downloads), NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(DONE_CHANNEL, getString(R.string.ch_finished), NotificationManager.IMPORTANCE_DEFAULT))
         startForeground(NOTIF_ID, summary(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
 
         val id = intent?.getIntExtra(EXTRA_ID, -1) ?: -1
@@ -86,12 +86,12 @@ class DownloadService : Service() {
         val format = d.format
         val audio = d.audio
         val codec = d.codec
-        val label = d.label.ifEmpty { if (audio) "Audio" else "Best quality" }
+        val label = d.label.ifEmpty { getString(if (audio) R.string.dl_audio else R.string.q_best) }
         val subs = d.subs
         val subsAuto = d.subsAuto
         val playlist = false   // whole playlists have their own screen and service
         val dir = File(cacheDir, "job-${d.id}")
-        d.stage = State.Stage.FETCH; d.percent = 0; d.text = "Fetching video info…"
+        d.stage = State.Stage.FETCH; d.percent = 0; d.text = getString(R.string.dl_fetching)
         State.changed(); notify(summary())
         try {
             dir.deleteRecursively(); dir.mkdirs()
@@ -127,13 +127,13 @@ class DownloadService : Service() {
             val progress: (Float, Long, String?) -> Unit = { p, _, line ->
                 val l = line ?: ""
                 Regex("Downloading (?:item|video) (\\d+) of (\\d+)").find(l)?.let {
-                    d.item = "Video ${it.groupValues[1]} of ${it.groupValues[2]} · "
+                    d.item = getString(R.string.dl_video_n_of, it.groupValues[1].toInt(), it.groupValues[2].toInt()) + " · "
                     d.stage = State.Stage.FETCH; last = -1
                 }
                 if (l.contains("[Merger]") || l.contains("[ExtractAudio]") || l.contains("[VideoRemuxer]") || l.contains("[ffmpeg]")) {
                     if (d.stage != State.Stage.FINISH) {
                         d.stage = State.Stage.FINISH; d.percent = 100
-                        d.text = "Finishing up…"; State.changed()
+                        d.text = getString(R.string.common_finishing); State.changed()
                         notify(summary())
                     }
                 } else if (d.stage != State.Stage.FINISH && p >= 0) {
@@ -142,7 +142,7 @@ class DownloadService : Service() {
                         last = pct
                         d.stage = State.Stage.DOWNLOAD   // the real download has started
                         d.percent = pct
-                        d.text = "Downloading… $pct%"
+                        d.text = getString(R.string.dl_downloading_pct, pct)
                         State.changed()
                         notify(summary())
                     }
@@ -172,7 +172,7 @@ class DownloadService : Service() {
                 catch (e: Exception) {
                     if (d.cancelled) throw e
                     dir.deleteRecursively(); dir.mkdirs(); d.stage = State.Stage.FETCH; d.percent = 0; last = -1
-                    d.text = "Extras did not work. Downloading without them…"; State.changed()
+                    d.text = getString(R.string.dl_extras_failed); State.changed()
                     runOnce(fmt, aud, false)
                 }
             }
@@ -184,7 +184,7 @@ class DownloadService : Service() {
                 if (d.cancelled || audio || format == Quality.BEST || Help.find(raw, url)?.id != "g_format") throw e
                 dir.deleteRecursively(); dir.mkdirs()
                 d.stage = State.Stage.FETCH; d.percent = 0; last = -1
-                d.text = "That quality is not available. Trying the best quality…"; State.changed()
+                d.text = getString(R.string.dl_quality_fallback); State.changed()
                 run(Quality.BEST, false)
             }
             if (d.cancelled) throw IllegalStateException("Cancelled")
@@ -195,22 +195,22 @@ class DownloadService : Service() {
             if (files.isEmpty()) throw IllegalStateException("No video file was made (no video found at this link).")
             d.stage = State.Stage.FINISH
             d.item = ""
-            d.text = "Finishing up…"; d.percent = 100; State.changed()
+            d.text = getString(R.string.common_finishing); d.percent = 100; State.changed()
             var openUri: Uri? = null
             var openMime: String? = null
-            val name = if (playlist) { files.forEach { saveToDownloads(it) }; "${files.size} files" }
+            val name = if (playlist) { files.forEach { saveToDownloads(it) }; getString(R.string.dl_files_n, files.size) }
                 else {
                     val f = files.maxByOrNull { it.length() }!!
                     val saved = saveToDownloads(f)
                     openUri = saved.uri; openMime = saved.mime
                     f.name
                 }
-            val title = if (playlist) "Playlist · $name" else name.substringBeforeLast('.').replace(Regex(" \\[[^\\]]+\\]$"), "")
-            val tag = if (subs != null && !audio) "$label + subtitles" else label
+            val title = if (playlist) getString(R.string.dl_playlist_title, name) else name.substringBeforeLast('.').replace(Regex(" \\[[^\\]]+\\]$"), "")
+            val tag = if (subs != null && !audio) getString(R.string.dl_label_subs, label) else label
             History.add(this, title, url, tag, openUri?.toString(), openMime)
-            d.text = "Done. Saved in Downloads: $name"
+            d.text = getString(R.string.dl_saved, name)
             d.phase = Dl.Phase.DONE
-            notifyDone(d, "Download finished", name, openUri, openMime)
+            notifyDone(d, getString(R.string.dl_notif_finished), name, openUri, openMime)
         } catch (e: Exception) {
             if (d.cancelled) {
                 State.dls.remove(d)   // a cancelled download leaves no card behind
@@ -220,7 +220,7 @@ class DownloadService : Service() {
                 d.failedStage = d.stage
                 d.helpTopic = topic?.id
                 d.needsLogin = topic?.login == true
-                d.errorShort = topic?.simple?.ifEmpty { null } ?: "The download did not work."
+                d.errorShort = topic?.let { getString(it.simple) } ?: getString(R.string.common_download_failed)
                 d.errorDetails = raw
                 d.sessionCode = 0
                 val base = Cookies.baseDomain(Cookies.hostOf(url))
@@ -228,7 +228,7 @@ class DownloadService : Service() {
                     d.sessionCode = Cookies.checkInstagram(this)
                 d.text = ""
                 d.phase = Dl.Phase.ERROR
-                notifyDone(d, "Download failed", d.errorShort)
+                notifyDone(d, getString(R.string.dl_notif_failed), d.errorShort)
             }
         } finally {
             dir.deleteRecursively()
@@ -268,9 +268,9 @@ class DownloadService : Service() {
         val waiting = act.size - running.size
         val one = act.singleOrNull()?.takeIf { it.phase == Dl.Phase.RUNNING }
         val text = when {
-            one != null -> one.text.ifEmpty { "Starting…" }
-            act.isEmpty() -> "Starting…"
-            else -> "${running.size} downloading" + (if (waiting > 0) " · $waiting waiting" else "")
+            one != null -> one.text.ifEmpty { getString(R.string.common_starting) }
+            act.isEmpty() -> getString(R.string.common_starting)
+            else -> getString(R.string.dl_notif_n_downloading, running.size) + (if (waiting > 0) " · " + getString(R.string.dl_notif_n_waiting, waiting) else "")
         }
         val determinate = one != null && one.stage == State.Stage.DOWNLOAD
         val b = Notification.Builder(this, CHANNEL)
@@ -283,7 +283,7 @@ class DownloadService : Service() {
                 this, 1, Intent(this, DownloadService::class.java).setAction(ACTION_CANCEL).putExtra(EXTRA_ID, d.id),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            b.addAction(Notification.Action.Builder(null, "Cancel", cancel).build())
+            b.addAction(Notification.Action.Builder(null, getString(R.string.common_cancel), cancel).build())
         }
         return b.build()
     }

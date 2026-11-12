@@ -19,10 +19,9 @@ fun Activity.showUpdateDialog(forError: Boolean, onRetry: () -> Unit) {
     val dlg = Dialog(this)
     dlg.requestWindowFeature(Window.FEATURE_NO_TITLE)
     val box = card(pad = 20)
-    val title = label("Update tools?", 20f, bold = true)
+    val title = label(getString(R.string.upd_title), 20f, bold = true)
     val body = label(
-        if (forError) "This problem may be fixed by updating yt-dlp, the tool that reads video sites."
-        else "The tools were not updated for more than 7 days. Sites change often, so updating keeps downloads working.",
+        getString(if (forError) R.string.upd_body_error else R.string.upd_body_old),
         15f, R.color.muted
     )
     val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -36,18 +35,18 @@ fun Activity.showUpdateDialog(forError: Boolean, onRetry: () -> Unit) {
     }
 
     fun finished(r: Tools.UpdateResult) {
-        title.text = if (r.ok) "Tools updated" else "Update failed"
-        body.text = if (r.ok) "New version: yt-dlp ${r.version}" else r.message
-        val close = button(if (r.ok && forError) "Close" else "Done", Kind.GHOST) { dlg.dismiss() }
-        if (r.ok && forError) setButtons(button("Retry", Kind.PRIMARY) { dlg.dismiss(); onRetry() }, close)
+        title.text = getString(if (r.ok) R.string.upd_done_title else R.string.upd_failed_title)
+        body.text = if (r.ok) getString(R.string.upd_new_version, r.version) else r.message
+        val close = button(getString(if (r.ok && forError) R.string.common_close else R.string.common_done), Kind.GHOST) { dlg.dismiss() }
+        if (r.ok && forError) setButtons(button(getString(R.string.common_retry), Kind.PRIMARY) { dlg.dismiss(); onRetry() }, close)
         else setButtons(close)
         dlg.setCancelable(true)
     }
 
     setButtons(
-        button("Update tools", Kind.PRIMARY) {
-            title.text = "Updating…"
-            body.text = "Please wait. This takes a few seconds."
+        button(getString(R.string.common_update_tools), Kind.PRIMARY) {
+            title.text = getString(R.string.upd_updating)
+            body.text = getString(R.string.upd_wait)
             buttons.removeAllViews()
             dlg.setCancelable(false)
             thread {
@@ -56,7 +55,7 @@ fun Activity.showUpdateDialog(forError: Boolean, onRetry: () -> Unit) {
                 runOnUiThread { if (!isFinishing && !isDestroyed) finished(r) }
             }
         },
-        button("Later", Kind.GHOST) { Tools.snoozeUpdate(this); dlg.dismiss() }
+        button(getString(R.string.common_later), Kind.GHOST) { Tools.snoozeUpdate(this); dlg.dismiss() }
     )
     dlg.setOnCancelListener { Tools.snoozeUpdate(this) }  // back button counts as "Later"
     dlg.setContentView(box)

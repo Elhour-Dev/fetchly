@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common_back">رجوع</string>
+    <string name="common_cancel">إلغاء</string>
+    <string name="common_close">إغلاق</string>
+    <string name="common_done">تم</string>
+    <string name="common_retry">إعادة المحاولة</string>
+    <string name="common_download">تنزيل</string>
+    <string name="common_help">المساعدة</string>
+    <string name="common_settings">الإعدادات</string>
+    <string name="common_log_in">تسجيل الدخول</string>
+    <string name="common_later">لاحقًا</string>
+    <string name="common_skip">تخطي</string>
+    <string name="common_paste">لصق</string>
+    <string name="common_clear">مسح</string>
+    <string name="common_open">فتح</string>
+    <string name="common_import_cookies">استيراد cookies.txt</string>
+    <string name="common_update_tools">تحديث الأدوات</string>
+    <string name="common_starting">جارٍ البدء…</string>
+    <string name="common_downloading">جارٍ التنزيل…</string>
+    <string name="common_finishing">جارٍ الإنهاء…</string>
+    <string name="common_downloads">التنزيلات</string>
+    <string name="common_site_unreadable">لا يمكن قراءة هذا الموقع الآن.</string>
+    <string name="common_download_failed">لم ينجح التنزيل.</string>
+    <string name="common_cookies_imported">تم استيراد ملفات الكوكيز.</string>
+    <string name="common_cookies_bad_file">لا يبدو هذا الملف ملف cookies.txt (بتنسيق Netscape).</string>
+    <string name="common_cookies_read_fail">تعذّرت قراءة هذا الملف.</string>
+    <string name="main_tagline">الصق الرابط.\nاحصل على الفيديو.</string>
+    <string name="main_works_with">يعمل مع YouTube وInstagram ومواقع كثيرة أخرى.</string>
+    <string name="main_paste_hint">الصق رابط الفيديو هنا</string>
+    <string name="main_quality">الجودة</string>
+    <string name="main_history">سجل التنزيلات</string>
+    <string name="main_saved_note">تُحفظ الفيديوهات المكتملة في مجلد التنزيلات لديك.</string>
+    <string name="main_tools_failed">تعذّر تشغيل أدوات التنزيل.</string>
+    <string name="main_no_link_shared">لم يتم العثور على رابط فيما شاركته.</string>
+    <string name="main_no_link_clipboard">لا يوجد رابط في الحافظة.</string>
+    <string name="main_bad_link">يرجى لصق رابط يبدأ بـ http:// أو https://</string>
+    <string name="main_video_and_list">يحتوي هذا الرابط على فيديو وقائمة تشغيل.</string>
+    <string name="main_this_video_only">هذا الفيديو فقط</string>
+    <string name="main_whole_playlist">قائمة التشغيل كاملة</string>
+    <string name="main_started">بدأ التنزيل. يمكنك الآن لصق رابط آخر.</string>
+    <string name="main_started_failed_q">تعذّر تحميل الجودات. سيتم التنزيل بأفضل جودة.</string>
+    <string name="main_started_best">جارٍ التنزيل بأفضل جودة.</string>
+    <string name="main_untitled">فيديو بدون عنوان</string>
+    <string name="yt_login_title">هل تريد تسجيل الدخول إلى YouTube أولًا؟</string>
+    <string name="yt_login_body">كثيرًا ما يحظر YouTube التنزيل عندما لا تكون مسجّلًا للدخول. سجّل الدخول مرة واحدة الآن لتعمل تنزيلاتك لاحقًا.</string>
+    <string name="yt_login_tip">نصيحة: استخدم حسابًا ثانيًا وليس حسابك الرئيسي.</string>
+    <string name="main_not_now">ليس الآن</string>
+    <string name="q_getting_ready">جارٍ التجهيز…</string>
+    <string name="q_still_checking">ما زال الفحص جاريًا… يستغرق وقتًا طويلًا. يمكنك الضغط على تنزيل للحصول على أفضل جودة الآن.</string>
+    <string name="q_checking">جارٍ فحص ما يقدمه هذا الفيديو…</string>
+    <string name="q_load_failed">تعذّر تحميل الجودات.</string>
+    <string name="q_failed_note">%1$s اضغط على تنزيل لتجرّب أفضل جودة على أي حال.</string>
+    <string name="subs_embed">تضمين الترجمة</string>
+    <string name="subs_language">اللغة: %1$s</string>
+    <string name="subs_pick_title">لغة الترجمة</string>
+    <string name="dl_cancel">إلغاء التنزيل</string>
+    <string name="dl_how_fix">كيفية الإصلاح</string>
+    <string name="dl_copy_details">نسخ تفاصيل الخطأ</string>
+    <string name="dl_waiting">في الانتظار…</string>
+    <string name="dl_waiting_sub">يبدأ عند انتهاء تنزيل آخر.</string>
+    <string name="dl_fetching">جارٍ جلب معلومات الفيديو…</string>
+    <string name="dl_merging">جارٍ دمج الفيديو والصوت.</string>
+    <string name="dl_cookies_saved">تم حفظ الكوكيز</string>
+    <string name="dl_tap_retry">اضغط على إعادة المحاولة للتنزيل مرة أخرى.</string>
+    <string name="dl_saved">تم الحفظ في التنزيلات: %1$s</string>
+    <string name="err_fresh">الأدوات محدّثة بالفعل. تغيّر الموقع ولا يستطيع المُنزِّل قراءة هذا الرابط بعد. حاول مرة أخرى بعد أيام قليلة، عقب التحديث القادم لـ yt-dlp.</string>
+    <string name="err_ig_200">يقبل Instagram تسجيل دخولك لكنه لم يعطِ أي فيديو لهذا الرابط. ربما حُذف المنشور أو لا يستطيع هذا الحساب رؤيته.</string>
+    <string name="err_ig_401">لم يعد Instagram يقبل تسجيل الدخول المحفوظ. اضغط على \"تسجيل الدخول\" للدخول من جديد.</string>
+    <string name="err_ig_429">يقيّد Instagram هذه الشبكة حاليًا. أوقف VPN أو بدّل الشبكة، وانتظر بضع دقائق، ثم اضغط على إعادة المحاولة.</string>
+    <string name="err_has_login">لدى Fetchy تسجيل دخولك إلى %1$s، لكن الموقع ما زال يطلب تسجيل الدخول. ربما انتهت صلاحيته أو لا يستطيع هذا الحساب رؤية هذا الرابط. سجّل الدخول من جديد أو استورد ملف cookies.txt حديثًا.</string>
+    <string name="err_ask_login">اضغط على \"تسجيل الدخول\"، سجّل الدخول، ثم اضغط على تم. سيعيد Fetchy المحاولة تلقائيًا. إذا لم يسمح الموقع بذلك، فاستخدم \"استيراد cookies.txt\" في الإعدادات.</string>
+    <string name="err_failed_fetch">فشلت العملية أثناء جلب معلومات الفيديو.</string>
+    <string name="err_failed_download">فشلت العملية أثناء التنزيل.</string>
+    <string name="err_failed_finish">فشلت العملية أثناء الإنهاء (دمج الفيديو والصوت).</string>
+    <string name="main_error_copied">تم نسخ تفاصيل الخطأ.</string>
+    <string name="main_logged_in_retry">تم تسجيل الدخول. جارٍ إعادة محاولة التنزيل…</string>
+    <string name="main_imported_no_login">تم الاستيراد، لكن هذا الملف لا يحتوي على كوكي تسجيل دخول لـ %1$s. صدّره مرة أخرى وأنت مسجّل الدخول.</string>
+    <string name="links_snapchat">غير مدعوم: لا يمكن تنزيل روابط Snapchat باستخدام Fetchy.</string>
+    <string name="links_ig_stories">غير مدعوم: لا يمكن تنزيل قصص Instagram باستخدام Fetchy.</string>
+    <string name="tools_up_to_date">هذا هو أحدث إصدار بالفعل: yt-dlp %1$s</string>
+    <string name="tools_updated">تم التحديث: yt-dlp من %1$s إلى %2$s</string>
+    <string name="tools_update_failed">فشل التحديث. تم الإبقاء على الإصدار القديم: yt-dlp %1$s\n(%2$s)</string>
+    <string name="ch_finished">التنزيلات المكتملة</string>
+    <string name="dl_audio">صوت</string>
+    <string name="dl_video_n_of">الفيديو %1$d من %2$d</string>
+    <string name="dl_downloading_pct">جارٍ التنزيل… %1$d%%</string>
+    <string name="dl_extras_failed">لم تعمل الإضافات. جارٍ التنزيل بدونها…</string>
+    <string name="dl_quality_fallback">هذه الجودة غير متاحة. جارٍ تجربة أفضل جودة…</string>
+    <string name="dl_files_n">%1$d ملفات</string>
+    <string name="dl_playlist_title">قائمة تشغيل · %1$s</string>
+    <string name="dl_label_subs">%1$s + ترجمة</string>
+    <string name="dl_notif_finished">اكتمل التنزيل</string>
+    <string name="dl_notif_failed">فشل التنزيل</string>
+    <string name="dl_notif_n_downloading">%1$d قيد التنزيل</string>
+    <string name="dl_notif_n_waiting">%1$d في الانتظار</string>
+    <string name="q_best">أفضل جودة</string>
+    <string name="q_up_to">حتى %1$dp</string>
+    <string name="q_highest">أعلى جودة متاحة</string>
+    <string name="q_mp4_video">فيديو MP4</string>
+    <string name="q_audio_mp3">صوت فقط (MP3)</string>
+    <string name="q_audio_mp3_detail">MP3 · ‏192 كيلوبت/ث · صورة الغلاف والوسوم</string>
+    <string name="q_audio_m4a">صوت فقط (M4A)</string>
+    <string name="q_audio_m4a_detail">M4A · الجودة الأصلية · الوسوم</string>
+    <string name="q_sub_auto">%1$s (تلقائي)</string>
+    <string name="pl_title">قائمة التشغيل</string>
+    <string name="pl_busy">ما زالت قائمة تشغيل قيد التنزيل. انتظر انتهاءها أو ألغِها أولًا.</string>
+    <string name="pl_try_again">حاول مرة أخرى</string>
+    <string name="pl_search_hint">ابحث في العناوين</string>
+    <string name="pl_range_hint">نطاق، مثل 5-20</string>
+    <string name="pl_select_range">تحديد النطاق</string>
+    <string name="pl_range_bad">اكتب نطاقًا مثل 5-20 أو 1-3، 8.</string>
+    <string name="pl_all">الكل</string>
+    <string name="pl_none">لا شيء</string>
+    <string name="pl_invert">عكس التحديد</string>
+    <string name="pl_load_more">تحميل المزيد</string>
+    <string name="pl_load_more_left">تحميل المزيد (المتبقي %1$d)</string>
+    <string name="pl_n_videos">%1$d فيديو</string>
+    <string name="pl_mix_capped">قوائم Mix لا تنتهي أبدًا، لذلك يُعرض أول %1$d فقط</string>
+    <string name="pl_fetching">جارٍ جلب قائمة التشغيل…</string>
+    <string name="pl_about">حوالي %1$s</string>
+    <string name="pl_selected">تم تحديد %1$d من %2$d</string>
+    <string name="pl_quality_for_all">الجودة للجميع: %1$s</string>
+    <string name="pl_select_to_download">حدّد الفيديوهات المراد تنزيلها</string>
+    <string name="pl_download_one">تنزيل فيديو واحد</string>
+    <string name="pl_download_n">تنزيل (%1$d) فيديو</string>
+    <string name="pl_finished">اكتمل</string>
+    <string name="pl_progress">جارٍ التنزيل · اكتمل %1$d من %2$d</string>
+    <string name="pl_paused">متوقف مؤقتًا</string>
+    <string name="pl_counts">%1$d مكتملة · %2$d فاشلة · %3$d متخطاة</string>
+    <string name="pl_cancelled_n">%1$d ملغاة</string>
+    <string name="pl_saved_in">تم الحفظ في التنزيلات/%1$s</string>
+    <string name="pl_pause_all">إيقاف الكل مؤقتًا</string>
+    <string name="pl_resume_all">استئناف الكل</string>
+    <string name="pl_cancel_all">إلغاء الكل</string>
+    <string name="pl_open_folder">فتح المجلد</string>
+    <string name="pl_retry_failed">إعادة محاولة الفاشلة</string>
+    <string name="pl_back_to_list">العودة إلى القائمة</string>
+    <string name="pl_pause">إيقاف مؤقت</string>
+    <string name="pl_resume">استئناف</string>
+    <string name="pl_quality_all_title">الجودة لكل الفيديوهات</string>
+    <string name="pl_open_files_hint">افتح تطبيق الملفات، ثم التنزيلات/%1$s.</string>
+    <string name="pl_already">تم تنزيله مسبقًا</string>
+    <string name="pl_will_skip">%1$s · سيتم تخطيه</string>
+    <string name="pl_st_waiting">في الانتظار</string>
+    <string name="pl_st_paused_at">متوقف مؤقتًا عند %1$d%% · المس للاستئناف</string>
+    <string name="pl_st_paused">متوقف مؤقتًا · المس للاستئناف</string>
+    <string name="pl_st_failed">فشل: %1$s · المس لإعادة المحاولة</string>
+    <string name="pl_st_unknown_error">خطأ غير معروف</string>
+    <string name="pl_st_skipped">تم التخطي: %1$s</string>
+    <string name="pl_st_not_available">غير متاح</string>
+    <string name="pl_st_cancelled">ملغاة · المس لإعادة المحاولة</string>
+    <string name="pl_r_private">فيديو خاص</string>
+    <string name="pl_r_members">للأعضاء فقط</string>
+    <string name="pl_r_removed">فيديو محذوف</string>
+    <string name="pl_r_deleted">فيديو محذوف</string>
+    <string name="pl_r_unavailable">غير متاح</string>
+    <string name="pl_r_geo">محظور في منطقتك</string>
+    <string name="pl_video_n">الفيديو %1$d</string>
+    <string name="pl_no_videos">لم يتم العثور على فيديوهات في قائمة التشغيل هذه.</string>
+    <string name="pl_load_failed">تعذّر تحميل قائمة التشغيل هذه.</string>
+    <string name="pl_err_generic">حدث خطأ ما. حاول مرة أخرى.</string>
+    <string name="pl_notif_finished">اكتملت قائمة التشغيل</string>
+    <string name="pl_notif_progress">اكتمل %1$d من %2$d</string>
+    <string name="hist_title">السجل</string>
+    <string name="hist_empty">لا شيء هنا بعد. تظهر التنزيلات المكتملة في هذه القائمة.</string>
+    <string name="hist_download_again">تنزيل مرة أخرى</string>
+    <string name="hist_remove">إزالة</string>
+    <string name="hist_clear">مسح السجل</string>
+    <string name="hist_open_failed">تعذّر فتح الملف. ربما نُقل أو حُذف.</string>
+    <string name="set_appearance">المظهر</string>
+    <string name="set_theme_system">النظام</string>
+    <string name="set_theme_light">فاتح</string>
+    <string name="set_theme_dark">داكن</string>
+    <string name="set_notifications">الإشعارات</string>
+    <string name="set_notify_done">أبلغني عند اكتمال التنزيل</string>
+    <string name="set_cookies">الكوكيز</string>
+    <string name="set_cookies_only_needed">مطلوبة فقط عندما يطلب موقع تسجيل الدخول.</string>
+    <string name="set_youtube_login">تسجيل الدخول إلى YouTube</string>
+    <string name="set_instagram_login">تسجيل الدخول إلى Instagram</string>
+    <string name="set_remove_cookies">حذف الكوكيز</string>
+    <string name="set_tools">الأدوات</string>
+    <string name="set_ytdlp_starting">yt-dlp: جارٍ البدء…</string>
+    <string name="set_tools_failed">تعذّر تشغيل الأدوات.</string>
+    <string name="set_cookies_saved">محفوظة على هذا الهاتف. تبقى خاصة.</string>
+    <string name="set_cookies_none">لا توجد كوكيز محفوظة.</string>
+    <string name="set_updating">جارٍ تحديث yt-dlp…</string>
+    <string name="upd_title">هل تريد تحديث الأدوات؟</string>
+    <string name="upd_body_error">قد يُحَل هذا الخلل بتحديث yt-dlp، وهو الأداة التي تقرأ مواقع الفيديو.</string>
+    <string name="upd_body_old">لم تُحدَّث الأدوات منذ أكثر من 7 أيام. تتغيّر المواقع كثيرًا، لذا يحافظ التحديث على عمل التنزيلات.</string>
+    <string name="upd_done_title">تم تحديث الأدوات</string>
+    <string name="upd_failed_title">فشل التحديث</string>
+    <string name="upd_new_version">الإصدار الجديد: yt-dlp %1$s</string>
+    <string name="upd_updating">جارٍ التحديث…</string>
+    <string name="upd_wait">يرجى الانتظار. يستغرق هذا بضع ثوانٍ.</string>
+    <string name="upd_allow_install">اسمح لـ Fetchy بتثبيت التحديثات، ثم عد إلى التطبيق.</string>
+    <string name="upd_open_apk">افتح ملف Fetchy .apk الجديد من التنزيلات لتثبيته.</string>
+    <string name="start_checking">جارٍ البحث عن تحديثات…</string>
+    <string name="start_new_version">الإصدار الجديد %1$s</string>
+    <string name="start_prompt">حدّث الآن، أو تخطَّ واستمر بهذا الإصدار.</string>
+    <string name="start_whats_new">ما الجديد</string>
+    <string name="start_update">تحديث</string>
+    <string name="start_downloading">جارٍ تنزيل %1$s… ستُفتح شاشة التثبيت عند الانتهاء.</string>
+    <string name="login_title">تسجيل الدخول إلى %1$s</string>
+    <string name="login_too_many">يقيّد هذا الموقع الطلبات الواردة من اتصالك حاليًا. انتظر قليلًا ثم حاول مرة أخرى، أو استخدم \"استيراد cookies.txt\" أدناه.</string>
+    <string name="login_blocked">لم يفتح هذا الموقع صفحة تسجيل الدخول داخل التطبيق. لا يتحايل Fetchy على ذلك. اضغط على إلغاء، أو استخدم \"استيراد cookies.txt\" أدناه.</string>
+    <string name="login_save_failed">تعذّر حفظ تسجيل الدخول. حاول مرة أخرى أو استخدم استيراد cookies.txt.</string>
+    <string name="login_ok">تم تسجيل الدخول</string>
+    <string name="login_no_inapp">لا يسمح هذا الموقع بتسجيل الدخول داخل التطبيقات. اضغط على إلغاء، ثم استخدم \"استيراد cookies.txt\".</string>
+    <string name="login_none_yet">لم يتم العثور على تسجيل دخول بعد. سجّل الدخول أولًا ثم اضغط على تم.</string>
+    <string name="login_visitor">لم يتم العثور على تسجيل دخول. تم حفظ كوكيز الزائر الخاصة بالموقع؛ جارٍ إعادة المحاولة.</string>
+    <string name="help_tap_topic">المس موضوعًا لفتحه.</string>
+    <string name="help_how_to">كيف أفعل</string>
+    <string name="help_fix_problem">حل مشكلة</string>
+    <string name="help_cookie_note">الكوكيز مثل كلمة المرور. لا تشاركها مع أحد أبدًا.</string>
+    <string name="help_g_download_title">تنزيل فيديو</string>
+    <string name="help_g_download_note">يمكنك أيضًا مشاركة رابط مباشرةً إلى Fetchy من قائمة المشاركة.</string>
+    <string name="help_g_playlist_title">تنزيل قائمة تشغيل</string>
+    <string name="help_g_playlist_note">يتم تخطي الفيديوهات الموجودة لديك بالفعل.</string>
+    <string name="help_g_login_title">تسجيل الدخول إلى YouTube أو Instagram</string>
+    <string name="help_g_login_note">نصيحة: استخدم حسابًا ثانيًا وليس حسابك الرئيسي. فهذا أكثر أمانًا إذا اعتبر الموقع تسجيل الدخول مشبوهًا. الكوكيز مثل كلمة المرور. لا تشاركها مع أحد أبدًا.</string>
+    <string name="help_g_find_title">العثور على فيديوهاتك</string>
+    <string name="help_g_tools_title">إبقاء التنزيلات تعمل</string>
+    <string name="help_g_tools_note">تتغيّر المواقع كثيرًا. يُصلح تحديث الأدوات معظم الأخطاء الجديدة.</string>
+    <string name="help_p_yt_bot_title">YouTube: \"سجّل الدخول لتأكيد أنك لست روبوتًا\"</string>
+    <string name="help_p_yt_bot_simple">يعتقد YouTube أن هذا روبوت وحظر التنزيل.</string>
+    <string name="help_p_yt_bot_why">لا يثق YouTube بهذا الاتصال. واستخدام VPN يزيد الأمر سوءًا.</string>
+    <string name="help_p_yt_unavail_title">YouTube: \"الفيديو غير متاح\"</string>
+    <string name="help_p_yt_unavail_simple">هذا الفيديو خاص أو محذوف أو محظور في بلدك أو يتطلب حساب شخص بالغ.</string>
+    <string name="help_p_yt_unavail_why">الفيديو خاص أو محذوف أو محظور في مكانك أو مخصص للبالغين فقط.</string>
+    <string name="help_p_ig_login_title">\"تسجيل الدخول مطلوب\"</string>
+    <string name="help_p_ig_login_simple">يريد هذا الموقع أن تكون مسجّلًا للدخول.</string>
+    <string name="help_p_ig_login_why">لا يعرض الموقع هذا المحتوى إلا للمسجّلين الدخول.</string>
+    <string name="help_p_ig_empty_title">Instagram: نتيجة فارغة</string>
+    <string name="help_p_ig_empty_simple">لم يُرجع الموقع أي شيء.</string>
+    <string name="help_p_ig_empty_why">أنت غير مسجّل الدخول، أو أن المنشور يحتوي على صور فقط.</string>
+    <string name="help_p_ig_private_title">منشور خاص أو محذوف</string>
+    <string name="help_p_ig_private_simple">هذا المنشور خاص أو تمت إزالته.</string>
+    <string name="help_p_ig_private_why">جعله صاحبه خاصًا أو حذفه.</string>
+    <string name="help_p_g_unsupported_title">الرابط غير مدعوم</string>
+    <string name="help_p_g_unsupported_simple">هذا الرابط ليس فيديو يستطيع Fetchy تنزيله.</string>
+    <string name="help_p_g_unsupported_why">الرابط ليس صفحة فيديو، أو أنه مقطوع، أو أن الموقع غير مدعوم.</string>
+    <string name="help_p_g_ffmpeg_title">لا يوجد صوت</string>
+    <string name="help_p_g_ffmpeg_simple">تعذّر دمج الفيديو والصوت.</string>
+    <string name="help_p_g_ffmpeg_why">ترسل المواقع غالبًا الفيديو والصوت منفصلين، وقد فشل دمجهما.</string>
+    <string name="help_p_g_network_title">تنزيل بطيء أو فاشل</string>
+    <string name="help_p_g_network_simple">فشل الاتصال أو انتهت مهلته أو رفضه الموقع.</string>
+    <string name="help_p_g_network_why">اتصال ضعيف، أو VPN، أو أن الموقع يقيّدك.</string>
+    <string name="help_p_g_update_title">\"Unable to extract\" أو \"update yt-dlp\"</string>
+    <string name="help_p_g_update_simple">من المحتمل أن yt-dlp قديم.</string>
+    <string name="help_p_g_update_why">تغيّر الموقع وتحتاج الأدوات إلى تحديث.</string>
+    <string name="help_p_g_format_title">\"التنسيق غير متاح\"</string>
+    <string name="help_p_g_format_simple">لم يتم العثور على تنسيق فيديو مطابق.</string>
+    <string name="help_p_g_format_why">لم يقدّم الموقع أي تنسيق يستطيع Fetchy استخدامه. غالبًا يتطلب تسجيل الدخول.</string>
+    <string-array name="help_g_download_steps">
+        <item>في تطبيق الفيديو، اضغط على مشاركة ثم نسخ الرابط.</item>
+        <item>في Fetchy، اضغط على لصق.</item>
+        <item>اختر جودة.</item>
+        <item>اضغط على تنزيل.</item>
+    </string-array>
+    <string-array name="help_g_playlist_steps">
+        <item>الصق رابط قائمة التشغيل واضغط على تنزيل.</item>
+        <item>حدّد الفيديوهات التي تريدها.</item>
+        <item>اختر جودة واحدة ثم اضغط على تنزيل.</item>
+        <item>إذا فشل بعضها، اضغط على \"إعادة محاولة الفاشلة\" في النهاية.</item>
+    </string-array>
+    <string-array name="help_g_login_steps">
+        <item>افتح الإعدادات.</item>
+        <item>اضغط على \"تسجيل الدخول إلى YouTube\" أو \"تسجيل الدخول إلى Instagram\".</item>
+        <item>سجّل الدخول ثم اضغط على تم.</item>
+        <item>صفحة تسجيل الدخول محظورة؟ اضغط على \"استيراد cookies.txt\" واختر الملف من التنزيلات.</item>
+    </string-array>
+    <string-array name="help_g_find_steps">
+        <item>افتح تطبيق الملفات (أو ملفاتي).</item>
+        <item>افتح التنزيلات. لكل قائمة تشغيل مجلد خاص بها هناك.</item>
+        <item>أو اضغط على \"سجل التنزيلات\" في Fetchy.</item>
+    </string-array>
+    <string-array name="help_g_tools_steps">
+        <item>افتح الإعدادات.</item>
+        <item>اضغط على \"تحديث الأدوات\".</item>
+        <item>انتظر ظهور رقم الإصدار الجديد.</item>
+    </string-array>
+    <string-array name="help_p_yt_bot_fix">
+        <item>أوقف أي VPN أو وكيل (proxy).</item>
+        <item>اضغط على \"تسجيل الدخول\" وسجّل الدخول إلى YouTube.</item>
+        <item>هل يحظر Google تسجيل الدخول؟ استخدم \"استيراد cookies.txt\" بدلًا من ذلك.</item>
+        <item>اضغط على \"إعادة المحاولة\".</item>
+    </string-array>
+    <string-array name="help_p_yt_unavail_fix">
+        <item>افتح الرابط في المتصفح. إذا لم يعمل هناك فلا يستطيع Fetchy الحصول عليه.</item>
+        <item>للبالغين فقط: اضغط على \"تسجيل الدخول\" بحساب شخص بالغ، ثم \"إعادة المحاولة\".</item>
+        <item>محذوف أو خاص: لا يستطيع إصلاح ذلك إلا صاحب الفيديو.</item>
+    </string-array>
+    <string-array name="help_p_ig_login_fix">
+        <item>اضغط على \"تسجيل الدخول\" وسجّل الدخول.</item>
+        <item>اضغط على تم. سيعيد Fetchy المحاولة تلقائيًا.</item>
+        <item>لا توجد صفحة تسجيل دخول؟ استخدم \"استيراد cookies.txt\".</item>
+    </string-array>
+    <string-array name="help_p_ig_empty_fix">
+        <item>اضغط على \"تسجيل الدخول\" ثم \"إعادة المحاولة\".</item>
+        <item>تأكد من أن المنشور فيديو أو Reel.</item>
+        <item>انتظر بضع دقائق ثم حاول مرة أخرى.</item>
+    </string-array>
+    <string-array name="help_p_ig_private_fix">
+        <item>افتح الرابط في المتصفح. إذا لم تستطع رؤيته فلن يستطيع Fetchy أيضًا.</item>
+        <item>خاص: سجّل الدخول بحساب يستطيع رؤيته ثم اضغط على \"إعادة المحاولة\".</item>
+        <item>محذوف: اختفى إلى الأبد.</item>
+    </string-array>
+    <string-array name="help_p_g_unsupported_fix">
+        <item>استخدم زر المشاركة في الفيديو ثم نسخ الرابط.</item>
+        <item>الصق الرابط كاملًا. يبدأ بـ https://</item>
+        <item>الصور لا تعمل. يقوم Fetchy بتنزيل الفيديوهات.</item>
+    </string-array>
+    <string-array name="help_p_g_ffmpeg_fix">
+        <item>اضغط على \"إعادة المحاولة\".</item>
+        <item>حرّر بعض مساحة التخزين على هاتفك.</item>
+        <item>افتح الإعدادات واضغط على \"تحديث الأدوات\".</item>
+    </string-array>
+    <string-array name="help_p_g_network_fix">
+        <item>تأكد من أن الإنترنت يعمل في المتصفح.</item>
+        <item>أوقف VPN وDNS الخاص.</item>
+        <item>انتظر بضع دقائق ثم اضغط على \"إعادة المحاولة\".</item>
+        <item>جرّب الشبكة الأخرى (Wi-Fi أو بيانات الجوال).</item>
+    </string-array>
+    <string-array name="help_p_g_update_fix">
+        <item>افتح الإعدادات واضغط على \"تحديث الأدوات\".</item>
+        <item>انتظر ظهور رقم الإصدار الجديد.</item>
+        <item>ارجع واضغط على \"إعادة المحاولة\".</item>
+    </string-array>
+    <string-array name="help_p_g_format_fix">
+        <item>افتح الإعدادات واضغط على \"تحديث الأدوات\".</item>
+        <item>اضغط على \"تسجيل الدخول\"، أو راجع \"تسجيل الدخول إلى YouTube أو Instagram\".</item>
+        <item>اضغط على \"إعادة المحاولة\".</item>
+    </string-array>
+</resources>

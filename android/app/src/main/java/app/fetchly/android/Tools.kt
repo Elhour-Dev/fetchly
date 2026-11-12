@@ -103,13 +103,13 @@ object Tools {
             val after = version(ctx)
             if (after == "unknown") throw IllegalStateException("New version did not start")
             prefs(ctx).edit().putLong("last_update", System.currentTimeMillis()).apply()
-            val msg = if (r == YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE) "Already the newest version: yt-dlp $after"
-            else "Updated: yt-dlp $before to $after"
+            val msg = if (r == YoutubeDL.UpdateStatus.ALREADY_UP_TO_DATE) ctx.getString(R.string.tools_up_to_date, after)
+            else ctx.getString(R.string.tools_updated, before, after)
             return UpdateResult(true, msg, after)
         } catch (e: Exception) {
             try { if (backup.exists()) { dir.deleteRecursively(); backup.copyRecursively(dir, true) } } catch (_: Exception) {}
             val v = version(ctx)
-            return UpdateResult(false, "Update failed. Old version kept: yt-dlp $v\n(" + (e.message ?: e.toString()).take(200) + ")", v)
+            return UpdateResult(false, ctx.getString(R.string.tools_update_failed, v, (e.message ?: e.toString()).take(200)), v)
         } finally {
             backup.deleteRecursively()
         }
@@ -151,13 +151,13 @@ object Tools {
  */
 /** Sites Fetchy cannot download from: the app says so at once (same text as the Windows app). */
 object Links {
-    fun unsupported(link: String): String? {
+    fun unsupported(ctx: Context, link: String): String? {
         val uri = try { android.net.Uri.parse(link.trim()) } catch (_: Exception) { return null }
         val host = (uri.host ?: "").lowercase().trimEnd('.')
         fun on(site: String) = host == site || host.endsWith(".$site")
-        if (on("snapchat.com")) return "Not supported: Snapchat links can't be downloaded with Fetchy."
+        if (on("snapchat.com")) return ctx.getString(R.string.links_snapchat)
         if (on("instagram.com") && Regex("^/(stories|s)/", RegexOption.IGNORE_CASE).containsMatchIn(uri.path ?: ""))
-            return "Not supported: Instagram stories can't be downloaded with Fetchy."
+            return ctx.getString(R.string.links_ig_stories)
         return null
     }
 }
@@ -277,9 +277,9 @@ object Cookies {
         val bytes = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         val text = String(bytes)
         if (bytes.size > 5_000_000 || !(text.take(4000).contains("Netscape") || text.take(4000).contains("\t")))
-            "This does not look like a cookies.txt file (Netscape format)."
+            ctx.getString(R.string.common_cookies_bad_file)
         else { merge(ctx, text.lines()); null }
-    } catch (e: Exception) { "Could not read that file." }
+    } catch (e: Exception) { ctx.getString(R.string.common_cookies_read_fail) }
 
     /** File picker that opens in the Downloads folder. */
     fun pickIntent() = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {

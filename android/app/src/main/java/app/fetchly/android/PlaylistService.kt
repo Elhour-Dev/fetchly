@@ -45,7 +45,7 @@ class PlaylistService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.common_downloads), NotificationManager.IMPORTANCE_LOW))
         startForeground(NOTIF_ID, notif(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         val cmd = intent?.getStringExtra(EXTRA_CMD)
         if (cmd != null && cmd != "start") apply(cmd, intent!!.getIntExtra(EXTRA_N, -1))
@@ -100,7 +100,7 @@ class PlaylistService : Service() {
             if (it == null) { main.post { ended() }; return }
             Pl.changed()
             try { Thread.sleep(wait); download(it) }
-            catch (e: Exception) { it.state = PlItem.S.FAILED; it.error = "Something went wrong. Try again." }
+            catch (e: Exception) { it.state = PlItem.S.FAILED; it.error = getString(R.string.pl_err_generic) }
             it.stop = null
             Pl.changed(); showProgress(true)
         }
@@ -150,8 +150,8 @@ class PlaylistService : Service() {
                 "cancel" -> { dir.deleteRecursively(); item.percent = 0; item.state = PlItem.S.CANCELLED }
                 else -> {
                     val raw = ex.message ?: ex.toString()
-                    val reason = Pl.skipReason(raw)
-                    item.error = reason ?: Help.find(raw, e.url)?.simple?.ifEmpty { null } ?: "The download did not work."
+                    val reason = Pl.skipReason(this, raw)
+                    item.error = reason ?: Help.find(raw, e.url)?.let { getString(it.simple) } ?: getString(R.string.common_download_failed)
                     item.state = if (reason != null) PlItem.S.SKIPPED else PlItem.S.FAILED
                 }
             }
@@ -180,10 +180,10 @@ class PlaylistService : Service() {
         val items = Pl.items
         if (items.isNotEmpty() && items.none { it.state == PlItem.S.PAUSED }) {
             fun count(s: PlItem.S) = items.count { it.state == s }
-            val text = "${count(PlItem.S.DONE)} done · ${count(PlItem.S.FAILED)} failed · ${count(PlItem.S.SKIPPED)} skipped"
+            val text = getString(R.string.pl_counts, count(PlItem.S.DONE), count(PlItem.S.FAILED), count(PlItem.S.SKIPPED))
             val n = Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                .setContentTitle("Playlist finished").setContentText(text).setAutoCancel(true)
+                .setContentTitle(getString(R.string.pl_notif_finished)).setContentText(text).setAutoCancel(true)
                 .setContentIntent(openApp()).build()
             getSystemService(NotificationManager::class.java).notify(DONE_ID, n)
         }
@@ -208,10 +208,10 @@ class PlaylistService : Service() {
         val parts = closed * 100 + items.filter { it.open }.sumOf { it.percent }
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(Pl.title.ifEmpty { "Playlist" }).setContentText("$closed of ${items.size} finished")
+            .setContentTitle(Pl.title.ifEmpty { getString(R.string.pl_title) }).setContentText(getString(R.string.pl_notif_progress, closed, items.size))
             .setProgress(100, parts / total, false).setOngoing(true).setOnlyAlertOnce(true)
             .setContentIntent(openApp())
-            .addAction(action("Pause all", "pause", 3)).addAction(action("Cancel all", "cancel", 4))
+            .addAction(action(getString(R.string.pl_pause_all), "pause", 3)).addAction(action(getString(R.string.pl_cancel_all), "cancel", 4))
             .build()
     }
 

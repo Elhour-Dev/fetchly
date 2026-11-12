@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common_back">Retour</string>
+    <string name="common_cancel">Annuler</string>
+    <string name="common_close">Fermer</string>
+    <string name="common_done">Terminé</string>
+    <string name="common_retry">Réessayer</string>
+    <string name="common_download">Télécharger</string>
+    <string name="common_help">Aide</string>
+    <string name="common_settings">Paramètres</string>
+    <string name="common_log_in">Se connecter</string>
+    <string name="common_later">Plus tard</string>
+    <string name="common_skip">Passer</string>
+    <string name="common_paste">Coller</string>
+    <string name="common_clear">Effacer</string>
+    <string name="common_open">Ouvrir</string>
+    <string name="common_import_cookies">Importer cookies.txt</string>
+    <string name="common_update_tools">Mettre à jour les outils</string>
+    <string name="common_starting">Démarrage…</string>
+    <string name="common_downloading">Téléchargement…</string>
+    <string name="common_finishing">Finalisation…</string>
+    <string name="common_downloads">Téléchargements</string>
+    <string name="common_site_unreadable">Ce site ne peut pas être lu pour le moment.</string>
+    <string name="common_download_failed">Le téléchargement a échoué.</string>
+    <string name="common_cookies_imported">Cookies importés.</string>
+    <string name="common_cookies_bad_file">Ce fichier ne ressemble pas à un fichier cookies.txt (format Netscape).</string>
+    <string name="common_cookies_read_fail">Impossible de lire ce fichier.</string>
+    <string name="main_tagline">Collez un lien.\nRécupérez la vidéo.</string>
+    <string name="main_works_with">Fonctionne avec YouTube, Instagram et de nombreux autres sites.</string>
+    <string name="main_paste_hint">Collez le lien de la vidéo ici</string>
+    <string name="main_quality">Qualité</string>
+    <string name="main_history">Historique des téléchargements</string>
+    <string name="main_saved_note">Les vidéos terminées sont enregistrées dans votre dossier Téléchargements.</string>
+    <string name="main_tools_failed">Les outils de téléchargement n\'ont pas pu démarrer.</string>
+    <string name="main_no_link_shared">Aucun lien trouvé dans ce que vous avez partagé.</string>
+    <string name="main_no_link_clipboard">Aucun lien dans le presse-papiers.</string>
+    <string name="main_bad_link">Collez un lien qui commence par http:// ou https://</string>
+    <string name="main_video_and_list">Ce lien contient une vidéo et une playlist.</string>
+    <string name="main_this_video_only">Cette vidéo uniquement</string>
+    <string name="main_whole_playlist">Toute la playlist</string>
+    <string name="main_started">Téléchargement lancé. Vous pouvez coller un autre lien.</string>
+    <string name="main_started_failed_q">Impossible de charger les qualités. Téléchargement en meilleure qualité.</string>
+    <string name="main_started_best">Téléchargement en meilleure qualité.</string>
+    <string name="main_untitled">Vidéo sans titre</string>
+    <string name="yt_login_title">Se connecter à YouTube d\'abord ?</string>
+    <string name="yt_login_body">YouTube bloque souvent les téléchargements quand vous n\'êtes pas connecté. Connectez-vous une fois maintenant, et vos téléchargements fonctionneront ensuite.</string>
+    <string name="yt_login_tip">Astuce : utilisez un deuxième compte, pas votre compte principal.</string>
+    <string name="main_not_now">Pas maintenant</string>
+    <string name="q_getting_ready">Préparation…</string>
+    <string name="q_still_checking">Vérification en cours… c\'est long. Vous pouvez appuyer sur Télécharger pour obtenir la meilleure qualité maintenant.</string>
+    <string name="q_checking">Vérification de ce que propose cette vidéo…</string>
+    <string name="q_load_failed">Impossible de charger les qualités.</string>
+    <string name="q_failed_note">%1$s Appuyez sur Télécharger pour essayer quand même la meilleure qualité.</string>
+    <string name="subs_embed">Intégrer les sous-titres</string>
+    <string name="subs_language">Langue : %1$s</string>
+    <string name="subs_pick_title">Langue des sous-titres</string>
+    <string name="dl_cancel">Annuler le téléchargement</string>
+    <string name="dl_how_fix">Comment corriger</string>
+    <string name="dl_copy_details">Copier les détails de l\'erreur</string>
+    <string name="dl_waiting">En attente…</string>
+    <string name="dl_waiting_sub">Démarre quand un autre téléchargement se termine.</string>
+    <string name="dl_fetching">Récupération des infos de la vidéo…</string>
+    <string name="dl_merging">Fusion de la vidéo et du son.</string>
+    <string name="dl_cookies_saved">Cookies enregistrés</string>
+    <string name="dl_tap_retry">Appuyez sur Réessayer pour télécharger à nouveau.</string>
+    <string name="dl_saved">Enregistré dans Téléchargements : %1$s</string>
+    <string name="err_fresh">Les outils sont déjà à jour. Le site a changé et le téléchargeur ne peut pas encore lire ce lien. Réessayez dans quelques jours, après la prochaine mise à jour de yt-dlp.</string>
+    <string name="err_ig_200">Instagram accepte votre connexion, mais n\'a donné aucune vidéo pour ce lien. La publication a peut-être disparu, ou ce compte ne peut pas la voir.</string>
+    <string name="err_ig_401">Instagram n\'accepte plus la connexion enregistrée. Appuyez sur « Se connecter » pour vous reconnecter.</string>
+    <string name="err_ig_429">Instagram limite ce réseau en ce moment. Désactivez le VPN ou changez de réseau, attendez quelques minutes, puis appuyez sur Réessayer.</string>
+    <string name="err_has_login">Fetchy a votre connexion à %1$s, mais le site en demande encore une. La connexion a peut-être expiré, ou ce compte ne peut pas voir ce lien. Reconnectez-vous, ou importez un cookies.txt récent.</string>
+    <string name="err_ask_login">Appuyez sur « Se connecter », connectez-vous, puis appuyez sur Terminé. Fetchy réessaie alors tout seul. Si le site ne l\'autorise pas, utilisez « Importer cookies.txt » dans les Paramètres.</string>
+    <string name="err_failed_fetch">Échec pendant la récupération des infos de la vidéo.</string>
+    <string name="err_failed_download">Échec pendant le téléchargement.</string>
+    <string name="err_failed_finish">Échec pendant la finalisation (fusion de la vidéo et du son).</string>
+    <string name="main_error_copied">Détails de l\'erreur copiés.</string>
+    <string name="main_logged_in_retry">Connecté. Nouvelle tentative de téléchargement…</string>
+    <string name="main_imported_no_login">Importé, mais ce fichier ne contient aucun cookie de connexion pour %1$s. Exportez-le à nouveau en étant connecté.</string>
+    <string name="links_snapchat">Non pris en charge : les liens Snapchat ne peuvent pas être téléchargés avec Fetchy.</string>
+    <string name="links_ig_stories">Non pris en charge : les stories Instagram ne peuvent pas être téléchargées avec Fetchy.</string>
+    <string name="tools_up_to_date">Déjà la version la plus récente : yt-dlp %1$s</string>
+    <string name="tools_updated">Mis à jour : yt-dlp %1$s vers %2$s</string>
+    <string name="tools_update_failed">Échec de la mise à jour. Ancienne version conservée : yt-dlp %1$s\n(%2$s)</string>
+    <string name="ch_finished">Téléchargements terminés</string>
+    <string name="dl_audio">Audio</string>
+    <string name="dl_video_n_of">Vidéo %1$d sur %2$d</string>
+    <string name="dl_downloading_pct">Téléchargement… %1$d %%</string>
+    <string name="dl_extras_failed">Les extras n\'ont pas fonctionné. Téléchargement sans eux…</string>
+    <string name="dl_quality_fallback">Cette qualité n\'est pas disponible. Essai avec la meilleure qualité…</string>
+    <string name="dl_files_n">%1$d fichiers</string>
+    <string name="dl_playlist_title">Playlist · %1$s</string>
+    <string name="dl_label_subs">%1$s + sous-titres</string>
+    <string name="dl_notif_finished">Téléchargement terminé</string>
+    <string name="dl_notif_failed">Échec du téléchargement</string>
+    <string name="dl_notif_n_downloading">%1$d en cours</string>
+    <string name="dl_notif_n_waiting">%1$d en attente</string>
+    <string name="q_best">Meilleure qualité</string>
+    <string name="q_up_to">Jusqu\'à %1$dp</string>
+    <string name="q_highest">La plus haute disponible</string>
+    <string name="q_mp4_video">Vidéo MP4</string>
+    <string name="q_audio_mp3">Audio uniquement (MP3)</string>
+    <string name="q_audio_mp3_detail">MP3 · 192 kbit/s · pochette et métadonnées</string>
+    <string name="q_audio_m4a">Audio uniquement (M4A)</string>
+    <string name="q_audio_m4a_detail">M4A · qualité d\'origine · métadonnées</string>
+    <string name="q_sub_auto">%1$s (auto)</string>
+    <string name="pl_title">Playlist</string>
+    <string name="pl_busy">Une playlist est encore en cours de téléchargement. Attendez qu\'elle se termine, ou annulez-la d\'abord.</string>
+    <string name="pl_try_again">Réessayer</string>
+    <string name="pl_search_hint">Rechercher dans les titres</string>
+    <string name="pl_range_hint">Plage, ex. 5-20</string>
+    <string name="pl_select_range">Sélectionner la plage</string>
+    <string name="pl_range_bad">Saisissez une plage comme 5-20 ou 1-3, 8.</string>
+    <string name="pl_all">Tout</string>
+    <string name="pl_none">Aucun</string>
+    <string name="pl_invert">Inverser</string>
+    <string name="pl_load_more">Charger plus</string>
+    <string name="pl_load_more_left">Charger plus (%1$d restantes)</string>
+    <string name="pl_n_videos">%1$d vidéos</string>
+    <string name="pl_mix_capped">Les playlists Mix ne se terminent jamais, donc seules les %1$d premières sont listées</string>
+    <string name="pl_fetching">Récupération de la playlist…</string>
+    <string name="pl_about">environ %1$s</string>
+    <string name="pl_selected">%1$d sur %2$d sélectionnées</string>
+    <string name="pl_quality_for_all">Qualité pour tous : %1$s</string>
+    <string name="pl_select_to_download">Sélectionnez des vidéos à télécharger</string>
+    <string name="pl_download_one">Télécharger 1 vidéo</string>
+    <string name="pl_download_n">Télécharger %1$d vidéos</string>
+    <string name="pl_finished">Terminé</string>
+    <string name="pl_progress">Téléchargement · %1$d sur %2$d terminées</string>
+    <string name="pl_paused">En pause</string>
+    <string name="pl_counts">%1$d terminées · %2$d échouées · %3$d ignorées</string>
+    <string name="pl_cancelled_n">%1$d annulées</string>
+    <string name="pl_saved_in">Enregistré dans Téléchargements/%1$s</string>
+    <string name="pl_pause_all">Tout mettre en pause</string>
+    <string name="pl_resume_all">Tout reprendre</string>
+    <string name="pl_cancel_all">Tout annuler</string>
+    <string name="pl_open_folder">Ouvrir le dossier</string>
+    <string name="pl_retry_failed">Réessayer les échecs</string>
+    <string name="pl_back_to_list">Retour à la liste</string>
+    <string name="pl_pause">Pause</string>
+    <string name="pl_resume">Reprendre</string>
+    <string name="pl_quality_all_title">Qualité pour toutes les vidéos</string>
+    <string name="pl_open_files_hint">Ouvrez l\'application Fichiers, puis Téléchargements/%1$s.</string>
+    <string name="pl_already">Déjà téléchargée</string>
+    <string name="pl_will_skip">%1$s · sera ignorée</string>
+    <string name="pl_st_waiting">En attente</string>
+    <string name="pl_st_paused_at">En pause à %1$d %% · touchez pour reprendre</string>
+    <string name="pl_st_paused">En pause · touchez pour reprendre</string>
+    <string name="pl_st_failed">Échec : %1$s · touchez pour réessayer</string>
+    <string name="pl_st_unknown_error">erreur inconnue</string>
+    <string name="pl_st_skipped">Ignorée : %1$s</string>
+    <string name="pl_st_not_available">indisponible</string>
+    <string name="pl_st_cancelled">Annulée · touchez pour réessayer</string>
+    <string name="pl_r_private">Vidéo privée</string>
+    <string name="pl_r_members">Réservée aux membres</string>
+    <string name="pl_r_removed">Vidéo supprimée</string>
+    <string name="pl_r_deleted">Vidéo supprimée</string>
+    <string name="pl_r_unavailable">Indisponible</string>
+    <string name="pl_r_geo">Bloquée dans votre région</string>
+    <string name="pl_video_n">Vidéo %1$d</string>
+    <string name="pl_no_videos">Aucune vidéo trouvée dans cette playlist.</string>
+    <string name="pl_load_failed">Impossible de charger cette playlist.</string>
+    <string name="pl_err_generic">Une erreur s\'est produite. Réessayez.</string>
+    <string name="pl_notif_finished">Playlist terminée</string>
+    <string name="pl_notif_progress">%1$d sur %2$d terminées</string>
+    <string name="hist_title">Historique</string>
+    <string name="hist_empty">Rien ici pour l\'instant. Les téléchargements terminés apparaissent dans cette liste.</string>
+    <string name="hist_download_again">Télécharger à nouveau</string>
+    <string name="hist_remove">Supprimer</string>
+    <string name="hist_clear">Effacer l\'historique</string>
+    <string name="hist_open_failed">Impossible d\'ouvrir le fichier. Il a peut-être été déplacé ou supprimé.</string>
+    <string name="set_appearance">Apparence</string>
+    <string name="set_theme_system">Système</string>
+    <string name="set_theme_light">Clair</string>
+    <string name="set_theme_dark">Sombre</string>
+    <string name="set_notifications">Notifications</string>
+    <string name="set_notify_done">Me prévenir quand un téléchargement est terminé</string>
+    <string name="set_cookies">Cookies</string>
+    <string name="set_cookies_only_needed">Nécessaires seulement quand un site demande une connexion.</string>
+    <string name="set_youtube_login">Connexion YouTube</string>
+    <string name="set_instagram_login">Connexion Instagram</string>
+    <string name="set_remove_cookies">Supprimer les cookies</string>
+    <string name="set_tools">Outils</string>
+    <string name="set_ytdlp_starting">yt-dlp : démarrage…</string>
+    <string name="set_tools_failed">Les outils n\'ont pas pu démarrer.</string>
+    <string name="set_cookies_saved">Enregistrés sur ce téléphone. Gardés privés.</string>
+    <string name="set_cookies_none">Aucun enregistré.</string>
+    <string name="set_updating">Mise à jour de yt-dlp…</string>
+    <string name="upd_title">Mettre à jour les outils ?</string>
+    <string name="upd_body_error">Ce problème peut être résolu en mettant à jour yt-dlp, l\'outil qui lit les sites vidéo.</string>
+    <string name="upd_body_old">Les outils n\'ont pas été mis à jour depuis plus de 7 jours. Les sites changent souvent, donc la mise à jour garde les téléchargements fonctionnels.</string>
+    <string name="upd_done_title">Outils mis à jour</string>
+    <string name="upd_failed_title">Échec de la mise à jour</string>
+    <string name="upd_new_version">Nouvelle version : yt-dlp %1$s</string>
+    <string name="upd_updating">Mise à jour…</string>
+    <string name="upd_wait">Veuillez patienter. Cela prend quelques secondes.</string>
+    <string name="upd_allow_install">Autorisez Fetchy à installer des mises à jour, puis revenez.</string>
+    <string name="upd_open_apk">Ouvrez le nouveau fichier .apk de Fetchy dans vos Téléchargements pour l\'installer.</string>
+    <string name="start_checking">Recherche de mises à jour…</string>
+    <string name="start_new_version">Nouvelle version %1$s</string>
+    <string name="start_prompt">Mettez à jour maintenant, ou passez et gardez cette version.</string>
+    <string name="start_whats_new">Nouveautés</string>
+    <string name="start_update">Mettre à jour</string>
+    <string name="start_downloading">Téléchargement de %1$s… L\'écran d\'installation s\'ouvre à la fin.</string>
+    <string name="login_title">Connexion à %1$s</string>
+    <string name="login_too_many">Ce site limite les requêtes de votre connexion en ce moment. Attendez un peu et réessayez, ou utilisez « Importer cookies.txt » ci-dessous.</string>
+    <string name="login_blocked">Ce site n\'a pas ouvert sa page de connexion dans l\'application. Fetchy ne contourne pas cela. Appuyez sur Annuler, ou utilisez « Importer cookies.txt » ci-dessous.</string>
+    <string name="login_save_failed">La connexion n\'a pas pu être enregistrée. Réessayez, ou utilisez Importer cookies.txt.</string>
+    <string name="login_ok">Connecté</string>
+    <string name="login_no_inapp">Ce site n\'autorise pas la connexion dans les applications. Appuyez sur Annuler, puis utilisez « Importer cookies.txt ».</string>
+    <string name="login_none_yet">Aucune connexion trouvée. Connectez-vous d\'abord, puis appuyez sur Terminé.</string>
+    <string name="login_visitor">Aucune connexion trouvée. Les cookies de visiteur du site ont été enregistrés ; nouvelle tentative.</string>
+    <string name="help_tap_topic">Touchez un sujet pour l\'ouvrir.</string>
+    <string name="help_how_to">Comment faire</string>
+    <string name="help_fix_problem">Résoudre un problème</string>
+    <string name="help_cookie_note">Les cookies sont comme un mot de passe. Ne les partagez jamais.</string>
+    <string name="help_g_download_title">Télécharger une vidéo</string>
+    <string name="help_g_download_note">Vous pouvez aussi partager un lien directement vers Fetchy depuis le menu Partager.</string>
+    <string name="help_g_playlist_title">Télécharger une playlist</string>
+    <string name="help_g_playlist_note">Les vidéos que vous avez déjà sont ignorées.</string>
+    <string name="help_g_login_title">Se connecter à YouTube ou Instagram</string>
+    <string name="help_g_login_note">Astuce : utilisez un deuxième compte, pas votre compte principal. C\'est plus sûr si le site signale la connexion. Les cookies sont comme un mot de passe. Ne les partagez jamais.</string>
+    <string name="help_g_find_title">Retrouver vos vidéos</string>
+    <string name="help_g_tools_title">Garder les téléchargements fonctionnels</string>
+    <string name="help_g_tools_note">Les sites changent souvent. Mettre à jour les outils corrige la plupart des nouvelles erreurs.</string>
+    <string name="help_p_yt_bot_title">YouTube : « Connectez-vous pour confirmer que vous n\'êtes pas un robot »</string>
+    <string name="help_p_yt_bot_simple">YouTube pense qu\'il s\'agit d\'un robot et a bloqué le téléchargement.</string>
+    <string name="help_p_yt_bot_why">YouTube ne fait pas confiance à la connexion. Un VPN aggrave le problème.</string>
+    <string name="help_p_yt_unavail_title">YouTube : « Vidéo non disponible »</string>
+    <string name="help_p_yt_unavail_simple">Cette vidéo est privée, supprimée, bloquée dans votre pays, ou nécessite un compte adulte.</string>
+    <string name="help_p_yt_unavail_why">La vidéo est privée, supprimée, bloquée là où vous êtes, ou réservée aux adultes.</string>
+    <string name="help_p_ig_login_title">« Connexion requise »</string>
+    <string name="help_p_ig_login_simple">Ce site veut que vous soyez connecté.</string>
+    <string name="help_p_ig_login_why">Le site ne montre cela qu\'aux personnes connectées.</string>
+    <string name="help_p_ig_empty_title">Instagram : résultat vide</string>
+    <string name="help_p_ig_empty_simple">Le site n\'a rien renvoyé.</string>
+    <string name="help_p_ig_empty_why">Vous n\'êtes pas connecté, ou la publication ne contient que des photos.</string>
+    <string name="help_p_ig_private_title">Publication privée ou supprimée</string>
+    <string name="help_p_ig_private_simple">Cette publication est privée ou a été supprimée.</string>
+    <string name="help_p_ig_private_why">Le propriétaire l\'a rendue privée ou l\'a supprimée.</string>
+    <string name="help_p_g_unsupported_title">Lien non pris en charge</string>
+    <string name="help_p_g_unsupported_simple">Ce lien n\'est pas une vidéo que Fetchy peut télécharger.</string>
+    <string name="help_p_g_unsupported_why">Le lien n\'est pas une page vidéo, est tronqué, ou le site n\'est pas pris en charge.</string>
+    <string name="help_p_g_ffmpeg_title">Pas de son</string>
+    <string name="help_p_g_ffmpeg_simple">La vidéo et le son n\'ont pas pu être assemblés.</string>
+    <string name="help_p_g_ffmpeg_why">Les sites envoient souvent la vidéo et le son séparément, et leur assemblage a échoué.</string>
+    <string name="help_p_g_network_title">Téléchargement lent ou échoué</string>
+    <string name="help_p_g_network_simple">La connexion a échoué, a expiré, ou le site l\'a refusée.</string>
+    <string name="help_p_g_network_why">Connexion faible, un VPN, ou le site vous limite.</string>
+    <string name="help_p_g_update_title">« Unable to extract » ou « update yt-dlp »</string>
+    <string name="help_p_g_update_simple">yt-dlp n\'est probablement pas à jour.</string>
+    <string name="help_p_g_update_why">Le site a changé, et les outils ont besoin d\'une mise à jour.</string>
+    <string name="help_p_g_format_title">« Format non disponible »</string>
+    <string name="help_p_g_format_simple">Aucun format vidéo correspondant n\'a été trouvé.</string>
+    <string name="help_p_g_format_why">Le site n\'a donné aucun format utilisable par Fetchy. Souvent, une connexion est nécessaire.</string>
+    <string-array name="help_g_download_steps">
+        <item>Dans l\'application de la vidéo, touchez Partager, puis Copier le lien.</item>
+        <item>Dans Fetchy, touchez Coller.</item>
+        <item>Choisissez une qualité.</item>
+        <item>Touchez Télécharger.</item>
+    </string-array>
+    <string-array name="help_g_playlist_steps">
+        <item>Collez un lien de playlist et touchez Télécharger.</item>
+        <item>Cochez les vidéos souhaitées.</item>
+        <item>Choisissez une qualité, puis touchez Télécharger.</item>
+        <item>Si certaines échouent, touchez « Réessayer les échecs » à la fin.</item>
+    </string-array>
+    <string-array name="help_g_login_steps">
+        <item>Ouvrez les Paramètres.</item>
+        <item>Touchez « Connexion YouTube » ou « Connexion Instagram ».</item>
+        <item>Connectez-vous, puis touchez Terminé.</item>
+        <item>Page de connexion bloquée ? Touchez « Importer cookies.txt » et choisissez le fichier dans Téléchargements.</item>
+    </string-array>
+    <string-array name="help_g_find_steps">
+        <item>Ouvrez l\'application Fichiers (ou Mes fichiers).</item>
+        <item>Ouvrez Téléchargements. Les playlists y ont leur propre dossier.</item>
+        <item>Ou touchez « Historique des téléchargements » dans Fetchy.</item>
+    </string-array>
+    <string-array name="help_g_tools_steps">
+        <item>Ouvrez les Paramètres.</item>
+        <item>Touchez « Mettre à jour les outils ».</item>
+        <item>Attendez le nouveau numéro de version.</item>
+    </string-array>
+    <string-array name="help_p_yt_bot_fix">
+        <item>Désactivez tout VPN ou proxy.</item>
+        <item>Touchez « Se connecter » et connectez-vous à YouTube.</item>
+        <item>Google bloque la connexion ? Utilisez plutôt « Importer cookies.txt ».</item>
+        <item>Touchez « Réessayer ».</item>
+    </string-array>
+    <string-array name="help_p_yt_unavail_fix">
+        <item>Ouvrez le lien dans votre navigateur. S\'il ne se lit pas là-bas, Fetchy ne peut pas le récupérer.</item>
+        <item>Pour les adultes uniquement : touchez « Se connecter » avec un compte adulte, puis « Réessayer ».</item>
+        <item>Supprimée ou privée : seul le propriétaire peut régler cela.</item>
+    </string-array>
+    <string-array name="help_p_ig_login_fix">
+        <item>Touchez « Se connecter » et connectez-vous.</item>
+        <item>Touchez Terminé. Fetchy réessaie tout seul.</item>
+        <item>Pas de page de connexion ? Utilisez « Importer cookies.txt ».</item>
+    </string-array>
+    <string-array name="help_p_ig_empty_fix">
+        <item>Touchez « Se connecter », puis « Réessayer ».</item>
+        <item>Vérifiez que la publication est une vidéo ou un Reel.</item>
+        <item>Attendez quelques minutes, puis réessayez.</item>
+    </string-array>
+    <string-array name="help_p_ig_private_fix">
+        <item>Ouvrez le lien dans votre navigateur. Si vous ne la voyez pas, Fetchy non plus.</item>
+        <item>Privée : connectez-vous avec un compte qui peut la voir, puis touchez « Réessayer ».</item>
+        <item>Supprimée : elle a disparu définitivement.</item>
+    </string-array>
+    <string-array name="help_p_g_unsupported_fix">
+        <item>Utilisez le bouton Partager de la vidéo, puis Copier le lien.</item>
+        <item>Collez le lien en entier. Il commence par https://</item>
+        <item>Les photos ne fonctionnent pas. Fetchy télécharge des vidéos.</item>
+    </string-array>
+    <string-array name="help_p_g_ffmpeg_fix">
+        <item>Touchez « Réessayer ».</item>
+        <item>Libérez de l\'espace de stockage sur votre téléphone.</item>
+        <item>Ouvrez les Paramètres et touchez « Mettre à jour les outils ».</item>
+    </string-array>
+    <string-array name="help_p_g_network_fix">
+        <item>Vérifiez qu\'Internet fonctionne dans votre navigateur.</item>
+        <item>Désactivez le VPN et le DNS privé.</item>
+        <item>Attendez quelques minutes, puis touchez « Réessayer ».</item>
+        <item>Essayez l\'autre réseau (Wi-Fi ou données mobiles).</item>
+    </string-array>
+    <string-array name="help_p_g_update_fix">
+        <item>Ouvrez les Paramètres et touchez « Mettre à jour les outils ».</item>
+        <item>Attendez le nouveau numéro de version.</item>
+        <item>Revenez en arrière et touchez « Réessayer ».</item>
+    </string-array>
+    <string-array name="help_p_g_format_fix">
+        <item>Ouvrez les Paramètres et touchez « Mettre à jour les outils ».</item>
+        <item>Touchez « Se connecter », ou voyez « Se connecter à YouTube ou Instagram ».</item>
+        <item>Touchez « Réessayer ».</item>
+    </string-array>
+</resources>

@@ -102,7 +102,7 @@ fun Activity.page(box: LinearLayout): ScrollView {
 /** Top bar for the inner screens: Back button on the left, title next to it. */
 fun Activity.topBar(title: String): LinearLayout = LinearLayout(this).apply {
     orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-    addView(button("Back", Kind.GHOST, 40) { finish() }.apply { setPadding(dp(16), 0, dp(16), 0) },
+    addView(button(getString(R.string.common_back), Kind.GHOST, 40) { finish() }.apply { setPadding(dp(16), 0, dp(16), 0) },
         LinearLayout.LayoutParams(-2, dp(40)))
     addView(label(title, 22f, bold = true), LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(14) })
 }

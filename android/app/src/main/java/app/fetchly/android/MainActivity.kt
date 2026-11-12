@@ -70,20 +70,21 @@ class MainActivity : ThemedActivity() {
         header.addView(ImageView(this).apply {
             setImageResource(R.drawable.ic_logo)
         }, LinearLayout.LayoutParams(dp(40), dp(40)))
-        header.addView(label("Fetchy", 20f, bold = true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
-        header.addView(button("Help", Kind.GHOST, 40) { openHelp(null) }.apply { setPadding(dp(16), 0, dp(16), 0) },
+        header.addView(label("Fetchy", 20f, bold = true), LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10) })
+        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))   // pushes Help and Settings to the far side
+        header.addView(button(getString(R.string.common_help), Kind.GHOST, 40) { openHelp(null) }.apply { setPadding(dp(16), 0, dp(16), 0) },
             LinearLayout.LayoutParams(-2, dp(40)))
-        header.addView(button("Settings", Kind.GHOST, 40) { startActivity(Intent(this, SettingsActivity::class.java)) }
+        header.addView(button(getString(R.string.common_settings), Kind.GHOST, 40) { startActivity(Intent(this, SettingsActivity::class.java)) }
             .apply { setPadding(dp(16), 0, dp(16), 0) }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginStart = dp(8) })
         box.add(header)
 
-        box.add(label("Paste a link.\nGet the video.", 30f, bold = true), 28)
-        box.add(label("Works with YouTube, Instagram and many more sites.", 16f, R.color.muted), 8)
+        box.add(label(getString(R.string.main_tagline), 30f, bold = true), 28)
+        box.add(label(getString(R.string.main_works_with), 16f, R.color.muted), 8)
 
         // Big paste field + big download button.
         url = EditText(this).apply {
             id = R.id.url_field
-            hint = "Paste video link here"; setHintTextColor(col(R.color.muted)); setTextColor(col(R.color.text))
+            hint = getString(R.string.main_paste_hint); setHintTextColor(col(R.color.muted)); setTextColor(col(R.color.text))
             inputType = InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_CLASS_TEXT
             setSingleLine(); textSize = 18f; minHeight = dp(64)
             setPadding(dp(16), 0, dp(16), 0)
@@ -91,8 +92,8 @@ class MainActivity : ThemedActivity() {
         }
         box.add(url, 24)
         val small = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        small.addView(button("Paste", Kind.TONAL, 44) { pasteFromClipboard() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(8) })
-        small.addView(button("Clear", Kind.GHOST, 44) { url.setText("") }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        small.addView(button(getString(R.string.common_paste), Kind.TONAL, 44) { pasteFromClipboard() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(8) })
+        small.addView(button(getString(R.string.common_clear), Kind.GHOST, 44) { url.setText("") }, LinearLayout.LayoutParams(0, dp(44), 1f))
         box.add(small, 10)
 
         qCard = card().apply { visibility = View.GONE }
@@ -108,14 +109,14 @@ class MainActivity : ThemedActivity() {
             setTextColor(android.graphics.Color.WHITE); setPadding(dp(7), dp(3), dp(7), dp(3))
             background = shape(0xB3000000.toInt(), 6)
         }
-        thumbBox.addView(durBadge, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(8), dp(8)) })
+        thumbBox.addView(durBadge, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(8); bottomMargin = dp(8) })
         preview.addView(thumbBox, LinearLayout.LayoutParams(-1, -2))
         pTitle = label("", 16f, bold = true).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         preview.add(pTitle, 10)
         pMeta = label("", 13f, R.color.muted).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         preview.add(pMeta, 2)
         qCard.addView(preview)
-        qCard.addView(label("Quality", 13f, R.color.muted, bold = true))
+        qCard.addView(label(getString(R.string.main_quality), 13f, R.color.muted, bold = true))
         qNote = label("", 14f, R.color.muted)
         qCard.add(qNote, 6)
         qList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -131,14 +132,14 @@ class MainActivity : ThemedActivity() {
         })
 
         // Hidden until the qualities are loaded (or could not be loaded): see renderQuality().
-        download = button("Download", Kind.PRIMARY, 64) { startDownload() }.apply { textSize = 19f; visibility = View.GONE }
+        download = button(getString(R.string.common_download), Kind.PRIMARY, 64) { startDownload() }.apply { textSize = 19f; visibility = View.GONE }
         box.add(download, 14, -1, dp(64))
 
         // Downloads: one card each (progress, done, or error). Several can run; the box above stays free.
         dlBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         box.add(dlBox, 20)
-        box.add(button("Download history", Kind.GHOST) { startActivity(Intent(this, HistoryActivity::class.java)) }, 20)
-        box.add(label("Finished videos are saved in your Downloads folder.", 14f, R.color.muted), 16)
+        box.add(button(getString(R.string.main_history), Kind.GHOST) { startActivity(Intent(this, HistoryActivity::class.java)) }, 20)
+        box.add(label(getString(R.string.main_saved_note), 14f, R.color.muted), 16)
 
         // Once per app start: the update check screen comes before the main page.
         if (State.appUpdateChecked) setContentView(scroll)
@@ -163,7 +164,7 @@ class MainActivity : ThemedActivity() {
                     loadQualities()
                 }
             } catch (e: Exception) {
-                runOnUiThread { State.dls.add(0, Dl.problem("The download tools could not start.", e.message ?: e.toString())); render() }
+                runOnUiThread { State.dls.add(0, Dl.problem(getString(R.string.main_tools_failed), e.message ?: e.toString())); render() }
             }
         }
         handleIntent(intent)
@@ -200,7 +201,7 @@ class MainActivity : ThemedActivity() {
         val shared = i.getStringExtra(Intent.EXTRA_TEXT) ?: return
         i.action = null
         val link = urlRegex.find(shared)?.value
-        if (link == null) { State.dls.add(0, Dl.problem("No link found in what you shared.", topic = "g_unsupported")); render(); return }
+        if (link == null) { State.dls.add(0, Dl.problem(getString(R.string.main_no_link_shared), topic = "g_unsupported")); render(); return }
         url.setText(link)   // the quality picker loads; tap Download to start
     }
 
@@ -208,19 +209,19 @@ class MainActivity : ThemedActivity() {
         val cm = getSystemService(ClipboardManager::class.java)
         val t = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
         val link = t?.let { urlRegex.find(it)?.value }
-        if (link != null) url.setText(link) else Toast.makeText(this, "No link in the clipboard.", Toast.LENGTH_SHORT).show()
+        if (link != null) url.setText(link) else Toast.makeText(this, getString(R.string.main_no_link_clipboard), Toast.LENGTH_SHORT).show()
     }
 
     private fun startDownload() {
         val link = urlRegex.find(url.text.toString())?.value
-        if (link == null) { Toast.makeText(this, "Please paste a link that starts with http:// or https://", Toast.LENGTH_LONG).show(); return }
-        Links.unsupported(link)?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show(); return }
+        if (link == null) { Toast.makeText(this, getString(R.string.main_bad_link), Toast.LENGTH_LONG).show(); return }
+        Links.unsupported(this, link)?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show(); return }
         // Playlist links open the playlist screen. A link with a video and a list asks first.
         if (Pl.isList(link) && link != singleFor) {
             val open = { startActivity(Intent(this, PlaylistActivity::class.java).putExtra("url", link)) }
             if (!Pl.hasVideo(link)) open()
-            else android.app.AlertDialog.Builder(this).setTitle("This link has a video and a playlist.")
-                .setItems(arrayOf("This video only", "Whole playlist")) { _, i -> if (i == 0) { singleFor = link; startDownload() } else open() }
+            else android.app.AlertDialog.Builder(this).setTitle(getString(R.string.main_video_and_list))
+                .setItems(arrayOf(getString(R.string.main_this_video_only), getString(R.string.main_whole_playlist))) { _, i -> if (i == 0) { singleFor = link; startDownload() } else open() }
                 .show()
             return
         }
@@ -239,9 +240,9 @@ class MainActivity : ThemedActivity() {
         startDl(Dl(id, link, opt?.format ?: Quality.BEST, opt?.audio == true, opt?.codec ?: "mp3", opt?.label.orEmpty(),
             sub?.code, sub?.auto == true, info, if (opt != null) loaded?.title.orEmpty() else ""))
         Toast.makeText(this, when {
-            opt != null -> "Download started. You can paste another link now."
-            failed -> "Could not load the qualities. Downloading the best quality."
-            else -> "Downloading the best quality."
+            opt != null -> getString(R.string.main_started)
+            failed -> getString(R.string.main_started_failed_q)
+            else -> getString(R.string.main_started_best)
         }, Toast.LENGTH_LONG).show()
         url.setText("")   // free the box for the next link
         loadQualities()
@@ -275,7 +276,7 @@ class MainActivity : ThemedActivity() {
         if (starting) return   // runs again when the main page shows
         val link = urlRegex.find(url.text.toString())?.value
         if (link == null) ytAskedLink = ""   // the field was cleared: the same link may ask again
-        notSupported = link?.let { Links.unsupported(it) }.orEmpty()
+        notSupported = link?.let { Links.unsupported(this, it) }.orEmpty()
         if (notSupported.isNotEmpty()) {   // say it at once, no check and no Download button
             cancelLoad(); loadedLink = null; options = null; failed = false; renderQuality(); return
         }
@@ -296,7 +297,7 @@ class MainActivity : ThemedActivity() {
             var why = ""
             val res: Loaded? = try { Quality.fetch(this, link, "formats-$seq") } catch (e: Exception) {
                 val t = Help.find((e.message ?: e.toString()).trim(), link)
-                why = if (t?.id == "g_update" && Tools.recentlyUpdated(this)) "This site cannot be read right now." else t?.simple.orEmpty(); null }
+                why = if (t?.id == "g_update" && Tools.recentlyUpdated(this)) getString(R.string.common_site_unreadable) else t?.let { getString(it.simple) }.orEmpty(); null }
             runOnUiThread {
                 if (seq != loadSeq) return@runOnUiThread
                 loading = false; slow = false; url.removeCallbacks(slowTimer)
@@ -315,7 +316,7 @@ class MainActivity : ThemedActivity() {
 
     /** Fill in the picture, length and title above the qualities. The picture loads on its own thread. */
     private fun showPreview(l: Loaded, link: String, seq: Int) {
-        pTitle.text = l.title.ifEmpty { "Untitled video" }
+        pTitle.text = l.title.ifEmpty { getString(R.string.main_untitled) }
         pMeta.text = listOf(l.uploader, Cookies.hostOf(link).removePrefix("www.")).filter { it.isNotEmpty() }.joinToString(" · ")
         show(pMeta, pMeta.text.isNotEmpty())
         val secs = l.duration.toLong()
@@ -368,16 +369,16 @@ class MainActivity : ThemedActivity() {
         val dlg = android.app.Dialog(this)
         dlg.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         val box = card(pad = 20)
-        box.addView(label("Log in to YouTube first?", 20f, bold = true))
-        box.add(label("YouTube often blocks downloads when you are not logged in. Log in once now, and your downloads work later.", 15f, R.color.muted), 8)
-        box.add(label("Tip: use a second account, not your main one.", 14f, R.color.muted), 8)
+        box.addView(label(getString(R.string.yt_login_title), 20f, bold = true))
+        box.add(label(getString(R.string.yt_login_body), 15f, R.color.muted), 8)
+        box.add(label(getString(R.string.yt_login_tip), 14f, R.color.muted), 8)
         var toLogin = false
-        box.add(button("Log in", Kind.PRIMARY) {
+        box.add(button(getString(R.string.common_log_in), Kind.PRIMARY) {
             toLogin = true; dlg.dismiss()
             @Suppress("DEPRECATION")
             startActivityForResult(Intent(this, LoginActivity::class.java).putExtra("url", Cookies.YOUTUBE_LOGIN), 22)
         }, 18, -1, dp(48))
-        box.add(button("Not now", Kind.GHOST) { dlg.dismiss() }, 8, -1, dp(48))
+        box.add(button(getString(R.string.main_not_now), Kind.GHOST) { dlg.dismiss() }, 8, -1, dp(48))
         dlg.setOnDismissListener { if (!toLogin) loadQualities() }   // "Not now" or Back: go on with the link
         dlg.setContentView(box)
         dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
@@ -398,9 +399,9 @@ class MainActivity : ThemedActivity() {
         qList.removeAllViews()
         qNote.text = when {
             notSupported.isNotEmpty() -> notSupported
-            loading -> if (!ready) "Getting ready…" else if (slow) "Still checking… this is taking long. You can tap Download to get the best quality now."
-                else "Checking what this video offers…"
-            failed -> (if (failWhy.isNotEmpty()) failWhy else "Could not load the qualities.") + " Tap Download to try the best quality anyway."
+            loading -> if (!ready) getString(R.string.q_getting_ready) else if (slow) getString(R.string.q_still_checking)
+                else getString(R.string.q_checking)
+            failed -> getString(R.string.q_failed_note, if (failWhy.isNotEmpty()) failWhy else getString(R.string.q_load_failed))
             else -> ""
         }
         qNote.setTextColor(col(if (notSupported.isNotEmpty()) R.color.err_text else R.color.muted))
@@ -438,13 +439,13 @@ class MainActivity : ThemedActivity() {
         show(subsRow, has)
         if (!has) return
         subsRow.addView(android.widget.CheckBox(this).apply {
-            text = "Embed subtitles"; textSize = 15f; setTextColor(col(R.color.text))
+            text = getString(R.string.subs_embed); textSize = 15f; setTextColor(col(R.color.text))
             isChecked = Quality.subsOn(this@MainActivity)
             setOnCheckedChangeListener { _, on -> Quality.setSubsOn(this@MainActivity, on) }
         })
         val cur = Quality.pickSub(this, subs)!!
-        subsRow.add(button("Language: ${cur.name}", Kind.GHOST, 40) {
-            android.app.AlertDialog.Builder(this).setTitle("Subtitle language")
+        subsRow.add(button(getString(R.string.subs_language, cur.name), Kind.GHOST, 40) {
+            android.app.AlertDialog.Builder(this).setTitle(getString(R.string.subs_pick_title))
                 .setItems(subs.map { if (it.name == it.code) it.code else "${it.name} (${it.code})" }.toTypedArray()) { _, i ->
                     Quality.setSubLang(this, subs[i].code); renderSubs()
                 }.show()
@@ -476,16 +477,16 @@ class MainActivity : ThemedActivity() {
             isIndeterminate = true
             indeterminateTintList = android.content.res.ColorStateList.valueOf(col(R.color.accent))
         }
-        val cancel = button("Cancel download", Kind.GHOST) { DownloadService.cancel(d) }
-        val logIn = button("Log in", Kind.PRIMARY) {
+        val cancel = button(getString(R.string.dl_cancel), Kind.GHOST) { DownloadService.cancel(d) }
+        val logIn = button(getString(R.string.common_log_in), Kind.PRIMARY) {
             State.loginFor = d.id
             @Suppress("DEPRECATION")
             startActivityForResult(Intent(this@MainActivity, LoginActivity::class.java).putExtra("url", Cookies.loginUrl(d.url)), 21)
         }
-        val retryBtn = button("Retry", Kind.PRIMARY) { retry(d) }
-        val fix = button("How to fix", Kind.TONAL) { openHelp(d.helpTopic) }
-        val copy = button("Copy error details", Kind.GHOST) { copyErrorDetails(d) }
-        val close = button("Close", Kind.GHOST) { State.dls.remove(d); render() }
+        val retryBtn = button(getString(R.string.common_retry), Kind.PRIMARY) { retry(d) }
+        val fix = button(getString(R.string.dl_how_fix), Kind.TONAL) { openHelp(d.helpTopic) }
+        val copy = button(getString(R.string.dl_copy_details), Kind.GHOST) { copyErrorDetails(d) }
+        val close = button(getString(R.string.common_close), Kind.GHOST) { State.dls.remove(d); render() }
         private var autoClose = false
 
         init {
@@ -512,43 +513,40 @@ class MainActivity : ThemedActivity() {
             when (p) {
                 Dl.Phase.QUEUED -> {
                     tint(R.color.card, R.color.border, R.color.text, R.color.muted)
-                    title.text = "Waiting…"; sub.text = "Starts when another download finishes."
+                    title.text = getString(R.string.dl_waiting); sub.text = getString(R.string.dl_waiting_sub)
                 }
                 Dl.Phase.RUNNING -> {
                     tint(R.color.card, R.color.border, R.color.text, R.color.muted)
                     when (d.stage) {
-                        State.Stage.FETCH -> { title.text = "Fetching video info…"; sub.text = "" }
-                        State.Stage.DOWNLOAD -> { title.text = "Downloading…"; sub.text = d.item + "${d.percent}%" }
-                        else -> { title.text = "Finishing up…"; sub.text = "Merging video and audio." }
+                        State.Stage.FETCH -> { title.text = getString(R.string.dl_fetching); sub.text = "" }
+                        State.Stage.DOWNLOAD -> { title.text = getString(R.string.common_downloading); sub.text = d.item + "${d.percent}%" }
+                        else -> { title.text = getString(R.string.common_finishing); sub.text = getString(R.string.dl_merging) }
                     }
                 }
                 Dl.Phase.DONE -> {
                     tint(R.color.ok_bg, R.color.ok_border, R.color.ok_text, R.color.ok_text)
-                    title.text = "Done"
-                    sub.text = d.text.removePrefix("Done. ")
+                    title.text = getString(R.string.common_done)
+                    sub.text = d.text
                     // A finished card closes by itself after a while, to make room (the file is in History).
                     if (!autoClose) { autoClose = true; root.postDelayed({ if (State.dls.remove(d)) render() }, 10_000) }
                 }
                 Dl.Phase.ERROR -> {
                     tint(R.color.err_bg, R.color.err_border, R.color.err_text, R.color.err_text)
-                    if (retryMode) { title.text = "Cookies saved"; sub.text = "Tap Retry to download again." }
+                    if (retryMode) { title.text = getString(R.string.dl_cookies_saved); sub.text = getString(R.string.dl_tap_retry) }
                     else {
                         val fresh = d.helpTopic == "g_update" && Tools.recentlyUpdated(this@MainActivity)
-                        title.text = if (fresh) "This site cannot be read right now." else d.errorShort
-                        val at = d.failedStage?.let { "Failed while ${it.failedAt}." } ?: ""
+                        title.text = if (fresh) getString(R.string.common_site_unreadable) else d.errorShort
+                        val at = d.failedStage?.let { failedWhile(it) } ?: ""
                         val base = Cookies.baseDomain(Cookies.hostOf(d.url))
                         val loggedIn = Cookies.sessionNames(base) != null && Cookies.savedHasSession(this@MainActivity, base)
-                        sub.text = (if (fresh) "The tools are already up to date. The site changed and the downloader cannot read this link yet. " +
-                            "Try again in a few days, after the next yt-dlp update. "
+                        sub.text = (if (fresh) getString(R.string.err_fresh) + " "
                         else if (login && loggedIn) when (d.sessionCode) {
-                            200 -> "Instagram accepts your login, but gave no video for this link. The post may be gone, or this account cannot see it. "
-                            401, 403 -> "Instagram no longer accepts the saved login. Tap \"Log in\" to sign in again. "
-                            429 -> "Instagram is limiting this network right now. Turn off VPN or switch network, wait a few minutes, then tap Retry. "
-                            else -> "Fetchy has your $base login, but the site still asked for one. " +
-                                "The login may have expired, or this account cannot see this link. Log in again, or import a fresh cookies.txt. "
+                            200 -> getString(R.string.err_ig_200) + " "
+                            401, 403 -> getString(R.string.err_ig_401) + " "
+                            429 -> getString(R.string.err_ig_429) + " "
+                            else -> getString(R.string.err_has_login, base) + " "
                         }
-                        else if (login) "Tap \"Log in\", sign in, then tap Done. Fetchy then retries by itself. " +
-                            "If the site does not allow it, use \"Import cookies.txt\" in Settings. " else "") + at
+                        else if (login) getString(R.string.err_ask_login) + " " else "") + at
                     }
                 }
             }
@@ -560,7 +558,7 @@ class MainActivity : ThemedActivity() {
             show(logIn, login); show(retryBtn, retryMode)
             show(fix, err && d.helpTopic != null && (!login || loggedInNow(d)))
             show(copy, err)   // always on an error, also when a login is asked (so a failed login can be reported)
-            close.text = if (login) "Cancel" else "Close"
+            close.text = getString(if (login) R.string.common_cancel else R.string.common_close)
             show(close, p == Dl.Phase.DONE || err)
         }
 
@@ -569,6 +567,12 @@ class MainActivity : ThemedActivity() {
             title.setTextColor(col(t)); sub.setTextColor(col(s)); name.setTextColor(col(s))
         }
     }
+
+    private fun failedWhile(s: State.Stage) = getString(when (s) {
+        State.Stage.FETCH -> R.string.err_failed_fetch
+        State.Stage.DOWNLOAD -> R.string.err_failed_download
+        State.Stage.FINISH -> R.string.err_failed_finish
+    })
 
     private fun openHelp(topic: String?) =
         startActivity(Intent(this, HelpActivity::class.java).putExtra("topic", topic))
@@ -594,7 +598,7 @@ class MainActivity : ThemedActivity() {
             append(d.errorDetails.ifEmpty { d.errorShort })
         }
         getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fetchy error", text))
-        Toast.makeText(this, "Error details copied.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.main_error_copied), Toast.LENGTH_SHORT).show()
     }
 
     // The user picked a cookies.txt: copied to private app storage, never logged.
@@ -604,7 +608,7 @@ class MainActivity : ThemedActivity() {
         if (requestCode == 21) {   // login page
             when (resultCode) {
                 RESULT_OK -> State.dls.firstOrNull { it.id == State.loginFor }?.let {
-                    Toast.makeText(this, "Logged in. Retrying the download…", Toast.LENGTH_SHORT).show(); retry(it)
+                    Toast.makeText(this, getString(R.string.main_logged_in_retry), Toast.LENGTH_SHORT).show(); retry(it)
                 }
                 LoginActivity.RESULT_IMPORT -> @Suppress("DEPRECATION") startActivityForResult(Cookies.pickIntent(), 20)
             }
@@ -622,8 +626,8 @@ class MainActivity : ThemedActivity() {
         if (err == null) State.cookiesSaved = true
         val base = Cookies.baseDomain(Cookies.hostOf(State.dls.firstOrNull { it.id == State.loginFor }?.url ?: ""))
         val noLogin = err == null && Cookies.sessionNames(base) != null && !Cookies.savedHasSession(this, base)
-        Toast.makeText(this, err ?: if (noLogin) "Imported, but this file has no login cookie for $base. Export it again while logged in."
-            else "Cookies imported.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, err ?: if (noLogin) getString(R.string.main_imported_no_login, base)
+            else getString(R.string.common_cookies_imported), Toast.LENGTH_LONG).show()
         render()
         loadQualities()
     }

@@ -46,7 +46,17 @@
     </div>
   </main>
   <script>
+    const LANG = (navigator.language || 'en').slice(0, 2);
+    document.documentElement.lang = ['fr', 'ar'].includes(LANG) ? LANG : 'en';
+    if (LANG === 'ar') document.documentElement.dir = 'rtl';
+    const TXT = {
+      fr: { 'Checking for updates…': 'Recherche de mises à jour…', 'Starting…': 'Démarrage…', 'New version ': 'Nouvelle version ', 'Update now, or skip and use this version.': 'Mettez à jour maintenant, ou ignorez et gardez cette version.', "What's new": 'Nouveautés', 'Downloading the update': 'Téléchargement de la mise à jour', 'Please wait…': 'Veuillez patienter…', Update: 'Mettre à jour', Skip: 'Ignorer' },
+      ar: { 'Checking for updates…': 'جارٍ البحث عن تحديثات…', 'Starting…': 'جارٍ البدء…', 'New version ': 'إصدار جديد ', 'Update now, or skip and use this version.': 'حدّث الآن، أو تخطَّ واستخدم هذا الإصدار.', "What's new": 'ما الجديد', 'Downloading the update': 'جارٍ تنزيل التحديث', 'Please wait…': 'يُرجى الانتظار…', Update: 'تحديث', Skip: 'تخطي' }
+    };
+    const T = k => (TXT[LANG] && TXT[LANG][k]) || k;
     const $ = id => document.getElementById(id);
+    $('update').textContent = T('Update'); $('skip').textContent = T('Skip');
+    $('status').textContent = T('Checking for updates…');
     function show(id, on) { $(id).hidden = !on; }
     $('update').onclick = () => window.fetchy.choose('update');
     $('skip').onclick = () => window.fetchy.choose('skip');
@@ -56,19 +66,19 @@
       show('bar', s.step === 'downloading');
       show('notes', s.step === 'update' && !!s.notes);
       show('buttons', s.step === 'update');
-      if (s.step === 'checking') { $('title').textContent = 'Fetchy'; $('status').textContent = 'Checking for updates…'; }
-      if (s.step === 'starting') { $('title').textContent = 'Fetchy'; $('status').textContent = s.text || 'Starting…'; }
+      if (s.step === 'checking') { $('title').textContent = 'Fetchy'; $('status').textContent = T('Checking for updates…'); }
+      if (s.step === 'starting') { $('title').textContent = 'Fetchy'; $('status').textContent = T(s.text || 'Starting…'); }
       if (s.step === 'update') {
-        $('title').textContent = 'New version ' + s.version;
-        $('status').textContent = 'Update now, or skip and use this version.';
+        $('title').textContent = T('New version ') + s.version;
+        $('status').textContent = T('Update now, or skip and use this version.');
         $('notes').textContent = '';
-        const b = document.createElement('b'); b.textContent = "What's new";
+        const b = document.createElement('b'); b.textContent = T("What's new");
         $('notes').append(b, document.createTextNode(s.notes || ''));
         $('update').focus();
       }
       if (s.step === 'downloading') {
-        $('title').textContent = 'Downloading the update';
-        $('status').textContent = s.percent >= 0 ? s.percent + '%' : 'Please wait…';
+        $('title').textContent = T('Downloading the update');
+        $('status').textContent = s.percent >= 0 ? s.percent + '%' : T('Please wait…');
         $('bar').firstElementChild.style.width = Math.max(0, s.percent) + '%';
       }
     });

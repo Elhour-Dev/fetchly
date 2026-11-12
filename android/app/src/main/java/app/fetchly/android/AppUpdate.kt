@@ -57,7 +57,7 @@ object AppUpdate {
     fun install(ctx: android.content.Context, uri: Uri) {
         if (!ctx.packageManager.canRequestPackageInstalls()) {
             pending = uri
-            android.widget.Toast.makeText(ctx, "Allow Fetchy to install updates, then come back.", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(ctx, ctx.getString(R.string.upd_allow_install), android.widget.Toast.LENGTH_LONG).show()
             try {
                 ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + ctx.packageName))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -69,7 +69,7 @@ object AppUpdate {
             ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION))
         } catch (e: Exception) {
-            android.widget.Toast.makeText(ctx, "Open the new Fetchy .apk from your Downloads to install it.", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(ctx, ctx.getString(R.string.upd_open_apk), android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -90,7 +90,7 @@ fun Activity.showStartScreen(onDone: () -> Unit) {
     box.addView(android.widget.ImageView(this).apply { setImageResource(R.drawable.ic_logo) }, LinearLayout.LayoutParams(dp(64), dp(64)))
     val title = label("Fetchy", 24f, bold = true).apply { gravity = Gravity.CENTER }
     box.add(title, 14, -2)
-    val status = label("Checking for updates…", 15f, R.color.muted).apply { gravity = Gravity.CENTER }
+    val status = label(getString(R.string.start_checking), 15f, R.color.muted).apply { gravity = Gravity.CENTER }
     box.add(status, 6, -2)
     val spin = android.widget.ProgressBar(this).apply {
         isIndeterminate = true
@@ -111,21 +111,21 @@ fun Activity.showStartScreen(onDone: () -> Unit) {
             if (finished || isFinishing || isDestroyed) return@runOnUiThread
             if (rel == null || !AppUpdate.isNewer(rel.tag, current)) { done(); return@runOnUiThread }
             box.removeCallbacks(giveUp)
-            title.text = "New version ${rel.tag.removePrefix("v")}"
-            status.text = "Update now, or skip and use this version."
+            title.text = getString(R.string.start_new_version, rel.tag.removePrefix("v"))
+            status.text = getString(R.string.start_prompt)
             spin.visibility = View.GONE
             val area = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             if (rel.notes.isNotEmpty()) {
                 val notes = card(pad = 12)
-                notes.addView(label("What's new", 15f, bold = true))
+                notes.addView(label(getString(R.string.start_whats_new), 15f, bold = true))
                 notes.add(android.widget.ScrollView(this).apply { addView(label(rel.notes, 14f, R.color.muted)) }, 4, -1, dp(150))
                 area.add(notes)
             }
-            area.add(button("Update", Kind.PRIMARY) {
+            area.add(button(getString(R.string.start_update), Kind.PRIMARY) {
                 if (!downloadApk(rel)) try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(rel.url))) } catch (e: Exception) { /* no browser */ }
                 done()
             }, 16, -1, dp(52))
-            area.add(button("Skip", Kind.GHOST) { done() }, 8, -1, dp(52))
+            area.add(button(getString(R.string.common_skip), Kind.GHOST) { done() }, 8, -1, dp(52))
             box.add(area, 18, -1)
         }
     }
@@ -155,7 +155,7 @@ private fun Activity.downloadApk(rel: AppUpdate.Release): Boolean {
         val filter = android.content.IntentFilter(android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE)
         if (android.os.Build.VERSION.SDK_INT >= 33) app.registerReceiver(rx, filter, android.content.Context.RECEIVER_EXPORTED)
         else @Suppress("UnspecifiedRegisterReceiverFlag") app.registerReceiver(rx, filter)
-        android.widget.Toast.makeText(this, "Downloading $name… The install screen opens when it is done.", android.widget.Toast.LENGTH_LONG).show()
+        android.widget.Toast.makeText(this, getString(R.string.start_downloading, name), android.widget.Toast.LENGTH_LONG).show()
         true
     } catch (e: Exception) { false }
 }

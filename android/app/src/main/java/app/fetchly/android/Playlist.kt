@@ -60,10 +60,12 @@ object Pl {
     } catch (_: Exception) { false }
 
     private val skipReasons = listOf(
-        "private video" to "Private video", "members-only" to "Members only", "has been removed" to "Removed video",
-        "deleted" to "Deleted video", "video unavailable" to "Not available", "not available" to "Not available",
-        "geo" to "Blocked in your region")
-    fun skipReason(raw: String): String? { val low = raw.lowercase(); return skipReasons.firstOrNull { low.contains(it.first) }?.second }
+        "private video" to R.string.pl_r_private, "members-only" to R.string.pl_r_members, "has been removed" to R.string.pl_r_removed,
+        "deleted" to R.string.pl_r_deleted, "video unavailable" to R.string.pl_r_unavailable, "not available" to R.string.pl_r_unavailable,
+        "geo" to R.string.pl_r_geo)
+    fun skipReason(ctx: Context, raw: String): String? {
+        val low = raw.lowercase(); return skipReasons.firstOrNull { low.contains(it.first) }?.let { ctx.getString(it.second) }
+    }
 
     fun safeName(s: String, max: Int = 70) = s.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), " ").replace(Regex("\\s+"), " ")
         .trim(' ', '.').take(max).trim(' ', '.')
@@ -105,16 +107,16 @@ object Pl {
                     val target = str("url").ifEmpty { str("webpage_url") }
                     if (!target.startsWith("http")) continue
                     val id = str("id"); val site = str("ie_key").lowercase()
-                    val name = str("title").ifEmpty { "Video ${i + 1}" }
+                    val name = str("title").ifEmpty { app.getString(R.string.pl_video_n, i + 1) }
                     val thumb = if (site == "youtube" && id.isNotEmpty()) "https://i.ytimg.com/vi/$id/mqdefault.jpg"
                         else e.optJSONArray("thumbnails")?.let { t -> t.optJSONObject(t.length() - 1)?.optString("url") }?.takeIf { it.startsWith("https://") }
-                    val gone = when (name.lowercase()) { "[private video]" -> "Private video"; "[deleted video]" -> "Deleted video"; else -> null }
+                    val gone = when (name.lowercase()) { "[private video]" -> app.getString(R.string.pl_r_private); "[deleted video]" -> app.getString(R.string.pl_r_deleted); else -> null }
                     val key = if (site.isNotEmpty() && id.isNotEmpty()) "$site $id" else ""
                     list.add(PlEntry(i + 1, target, key, name, if (e.isNull("duration")) 0 else e.optDouble("duration", 0.0).toInt(), thumb, gone)
                         .apply { this.have = key.isNotEmpty() && key in have })
                 }
                 if (list.isEmpty()) throw IllegalStateException("No videos were found in this playlist.")
-                val name = info.optString("title").ifEmpty { "Playlist" }
+                val name = info.optString("title")   // empty: the screens show a default name
                 main.post {
                     if (link != url) return@post
                     title = name; capped = isMix; entries = list; selected.addAll(list.map { it.n }); loading = false
@@ -124,7 +126,8 @@ object Pl {
                 val raw = e.message ?: e.toString()
                 main.post {
                     if (link != url) return@post
-                    error = if (raw.startsWith("No videos")) raw else Help.find(raw, link)?.simple?.ifEmpty { null } ?: "Could not load this playlist."
+                    error = if (raw.startsWith("No videos")) app.getString(R.string.pl_no_videos)
+                        else Help.find(raw, link)?.let { app.getString(it.simple) } ?: app.getString(R.string.pl_load_failed)
                     loading = false
                     listener?.invoke()
                 }
@@ -138,7 +141,7 @@ object Pl {
         val have = archived(ctx)
         items = entries.filter { it.n in selected }.map { e ->
             PlItem(e).apply {
-                val reason = e.unavailable ?: if (e.key.isNotEmpty() && e.key in have) "Already downloaded" else null
+                val reason = e.unavailable ?: if (e.key.isNotEmpty() && e.key in have) ctx.getString(R.string.pl_already) else null
                 if (reason != null) { state = PlItem.S.SKIPPED; error = reason }
             }
         }

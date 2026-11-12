@@ -76,14 +76,14 @@ object Quality {
         val info = JSONObject(json)
         // Keep the answer so the download does not ask the site again (a second request is often refused, e.g. TikTok 403).
         if (info.optString("_type", "video") == "video") try { infoFile(ctx).writeText(json) } catch (_: Exception) {}
-        return Loaded(options(info), subtitles(info), info.str("title"), info.num("duration"), info.str("thumbnail"),
+        return Loaded(options(ctx, info), subtitles(ctx, info), info.str("title"), info.num("duration"), info.str("thumbnail"),
             info.str("uploader").ifEmpty { info.str("channel") })
     }
 
     private val subCode = Regex("[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
 
     /** Uploaded subtitles, plus the automatic captions of the video's own language (listed as "-orig"). */
-    private fun subtitles(info: JSONObject): List<Sub> {
+    private fun subtitles(ctx: Context, info: JSONObject): List<Sub> {
         fun nameOf(code: String, tracks: org.json.JSONArray): String {
             for (i in 0 until tracks.length()) tracks.optJSONObject(i)?.optString("name")?.takeIf { it.isNotEmpty() }?.let { return it }
             return code
@@ -99,21 +99,21 @@ object Quality {
             for (code in a.keys().asSequence().toList()) {
                 val tracks = a.optJSONArray(code) ?: continue
                 if (code.endsWith("-orig") && subCode.matches(code) && out.none { it.code == code.removeSuffix("-orig") })
-                    out.add(Sub(code, nameOf(code, tracks).removeSuffix(" (Original)") + " (auto)", true))
+                    out.add(Sub(code, ctx.getString(R.string.q_sub_auto, nameOf(code, tracks).removeSuffix(" (Original)")), true))
             }
         }
         return out.take(60)
     }
 
     /** The choices for a whole playlist: one quality for every video (sizes are not known up front). */
-    fun playlistOptions() = listOf(QOption("best", "Best quality", "", null, BEST, false)) +
+    fun playlistOptions(ctx: Context) = listOf(QOption("best", ctx.getString(R.string.q_best), "", null, BEST, false)) +
         tiers.map { QOption(it.toString(), "${it}p", "", null, best(it), false) } +
-        QOption("audio", "Audio only (MP3)", "", null, AUDIO_FORMAT, true)
+        QOption("audio", ctx.getString(R.string.q_audio_mp3), "", null, AUDIO_FORMAT, true)
 
     /** The saved answer of the last [fetch] (may not exist). */
     fun infoFile(ctx: Context) = java.io.File(ctx.cacheDir, "info.json")
 
-    private fun options(info: JSONObject): List<QOption> {
+    private fun options(ctx: Context, info: JSONObject): List<QOption> {
         val duration = info.num("duration")
         val arr = info.optJSONArray("formats") ?: return emptyList()
         val all = (0 until arr.length()).map { arr.getJSONObject(it) }
@@ -143,18 +143,18 @@ object Quality {
 
         val out = ArrayList<QOption>()
         val top = pick(videos)
-        out.add(QOption("best", "Best quality", if (top != null) "Up to ${dim(top)}p" else "Highest available",
+        out.add(QOption("best", ctx.getString(R.string.q_best), if (top != null) ctx.getString(R.string.q_up_to, dim(top)) else ctx.getString(R.string.q_highest),
             top?.let { total(it) }, BEST, false))
 
         val portrait = top != null && top.num("width") > 0 && top.num("width") < top.num("height")
         for (t in tiers) {
             val at = videos.filter { abs(dim(it) - t) <= t / 20 }
             val cand = pick(at) ?: continue
-            out.add(QOption(t.toString(), "${t}p", "MP4 video", total(cand), best(t, if (portrait) "width" else "height"), false))
+            out.add(QOption(t.toString(), "${t}p", ctx.getString(R.string.q_mp4_video), total(cand), best(t, if (portrait) "width" else "height"), false))
         }
         if (all.any { it.hasCodec("acodec") }) {
-            out.add(QOption("audio", "Audio only (MP3)", "MP3 · 192 kbps · cover art and tags", audioSize, AUDIO_FORMAT, true))
-            out.add(QOption("m4a", "Audio only (M4A)", "M4A · original quality · tags", audioSize, M4A_FORMAT, true, "m4a"))
+            out.add(QOption("audio", ctx.getString(R.string.q_audio_mp3), ctx.getString(R.string.q_audio_mp3_detail), audioSize, AUDIO_FORMAT, true))
+            out.add(QOption("m4a", ctx.getString(R.string.q_audio_m4a), ctx.getString(R.string.q_audio_m4a_detail), audioSize, M4A_FORMAT, true, "m4a"))
         }
         return out
     }

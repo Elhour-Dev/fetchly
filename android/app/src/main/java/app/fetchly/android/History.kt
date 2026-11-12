@@ -59,7 +59,7 @@ class HistoryActivity : ThemedActivity() {
         super.onCreate(savedInstanceState)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = page(box)
-        box.add(topBar("History"))
+        box.add(topBar(getString(R.string.hist_title)))
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         box.add(list, 16)
         setContentView(scroll)
@@ -71,7 +71,7 @@ class HistoryActivity : ThemedActivity() {
         list.removeAllViews()
         val items = History.all(this)
         if (items.isEmpty()) {
-            list.addView(label("Nothing here yet. Finished downloads show up in this list.", 16f, R.color.muted))
+            list.addView(label(getString(R.string.hist_empty), 16f, R.color.muted))
             return
         }
         items.forEach { e ->
@@ -79,15 +79,15 @@ class HistoryActivity : ThemedActivity() {
             c.addView(label(e.title, 16f, bold = true))
             c.add(label(listOf(e.label, hostOf(e.link)).filter { it.isNotEmpty() }.joinToString(" · "), 13f, R.color.muted), 2)
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            if (e.uri != null) row.addView(button("Open", Kind.TONAL, 44) { open(e) },
+            if (e.uri != null) row.addView(button(getString(R.string.common_open), Kind.TONAL, 44) { open(e) },
                 LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(8) })
-            row.addView(button("Download again", Kind.TONAL, 44) { again(e) },
+            row.addView(button(getString(R.string.hist_download_again), Kind.TONAL, 44) { again(e) },
                 LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(8) })
-            row.addView(button("Remove", Kind.GHOST, 44) { History.remove(this, e.id); render() }, LinearLayout.LayoutParams(0, dp(44), 1f))
+            row.addView(button(getString(R.string.hist_remove), Kind.GHOST, 44) { History.remove(this, e.id); render() }, LinearLayout.LayoutParams(0, dp(44), 1f))
             c.add(row, 12)
             list.add(c, if (list.childCount == 0) 0 else 10)
         }
-        list.add(button("Clear history", Kind.DANGER) { History.clear(this); render() }, 16)
+        list.add(button(getString(R.string.hist_clear), Kind.DANGER) { History.clear(this); render() }, 16)
     }
 
     private fun hostOf(link: String) = try { Uri.parse(link).host?.removePrefix("www.") ?: "" } catch (e: Exception) { "" }
@@ -97,7 +97,7 @@ class HistoryActivity : ThemedActivity() {
             startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(e.uri), e.mime ?: "*/*")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
         } catch (x: Exception) {
-            Toast.makeText(this, "Could not open the file. It may have been moved or deleted.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.hist_open_failed), Toast.LENGTH_LONG).show()
         }
     }
 

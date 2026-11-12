@@ -20,13 +20,13 @@ class SettingsActivity : ThemedActivity() {
         super.onCreate(savedInstanceState)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = page(box)
-        box.add(topBar("Settings"))
+        box.add(topBar(getString(R.string.common_settings)))
 
         val ap = card()
-        ap.addView(label("Appearance", 18f, bold = true))
+        ap.addView(label(getString(R.string.set_appearance), 18f, bold = true))
         val cur = Theme.mode(this)
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("system" to "System", "light" to "Light", "dark" to "Dark").forEachIndexed { i, (m, n) ->
+        listOf("system" to getString(R.string.set_theme_system), "light" to getString(R.string.set_theme_light), "dark" to getString(R.string.set_theme_dark)).forEachIndexed { i, (m, n) ->
             row.addView(button(n, if (m == cur) Kind.PRIMARY else Kind.GHOST, 44) {
                 Theme.set(this, m); recreate()
             }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i > 0) marginStart = dp(8) })
@@ -35,40 +35,40 @@ class SettingsActivity : ThemedActivity() {
         box.add(ap, 16)
 
         val nt = card()
-        nt.addView(label("Notifications", 18f, bold = true))
+        nt.addView(label(getString(R.string.set_notifications), 18f, bold = true))
         nt.add(android.widget.CheckBox(this).apply {
-            text = "Notify me when a download is done"; textSize = 15f; setTextColor(col(R.color.text))
+            text = getString(R.string.set_notify_done); textSize = 15f; setTextColor(col(R.color.text))
             isChecked = Quality.notifyDone(this@SettingsActivity)
             setOnCheckedChangeListener { _, on -> Quality.setNotifyDone(this@SettingsActivity, on) }
         }, 6)
         box.add(nt, 16)
 
         val ck = card()
-        ck.addView(label("Cookies", 18f, bold = true))
+        ck.addView(label(getString(R.string.set_cookies), 18f, bold = true))
         cookieInfo = label("", 14f, R.color.muted)
         ck.add(cookieInfo, 4)
-        ck.add(label("Only needed when a site asks for a login. " + Help.COOKIE_NOTE, 14f, R.color.muted), 6)
-        ck.add(button("YouTube login", Kind.YOUTUBE) { login(Cookies.YOUTUBE_LOGIN) }, 14)
-        ck.add(button("Instagram login", Kind.INSTAGRAM) { login(Cookies.INSTAGRAM_LOGIN) }, 8)
-        ck.add(button("Import cookies.txt", Kind.TONAL) {
+        ck.add(label(getString(R.string.set_cookies_only_needed) + " " + getString(Help.COOKIE_NOTE), 14f, R.color.muted), 6)
+        ck.add(button(getString(R.string.set_youtube_login), Kind.YOUTUBE) { login(Cookies.YOUTUBE_LOGIN) }, 14)
+        ck.add(button(getString(R.string.set_instagram_login), Kind.INSTAGRAM) { login(Cookies.INSTAGRAM_LOGIN) }, 8)
+        ck.add(button(getString(R.string.common_import_cookies), Kind.TONAL) {
             @Suppress("DEPRECATION") startActivityForResult(Cookies.pickIntent(), 20)
         }, 8)
-        remove = button("Remove cookies", Kind.DANGER) { Cookies.remove(this); refresh() } as android.widget.Button
+        remove = button(getString(R.string.set_remove_cookies), Kind.DANGER) { Cookies.remove(this); refresh() } as android.widget.Button
         ck.add(remove, 8)
         box.add(ck, 16)
 
         val tl = card()
-        tl.addView(label("Tools", 18f, bold = true))
-        version = label("yt-dlp: starting…", 14f, R.color.muted)
+        tl.addView(label(getString(R.string.set_tools), 18f, bold = true))
+        version = label(getString(R.string.set_ytdlp_starting), 14f, R.color.muted)
         tl.add(version, 4)
-        update = button("Update tools", Kind.TONAL) { updateTools() } as android.widget.Button
+        update = button(getString(R.string.common_update_tools), Kind.TONAL) { updateTools() } as android.widget.Button
         tl.add(update, 14)
         box.add(tl, 16)
 
         setContentView(scroll)
         thread {
             try { Tools.init(this); val v = Tools.version(this); runOnUiThread { version.text = "yt-dlp: $v" } }
-            catch (e: Exception) { runOnUiThread { version.text = "Tools could not start." } }
+            catch (e: Exception) { runOnUiThread { version.text = getString(R.string.set_tools_failed) } }
         }
     }
 
@@ -78,7 +78,7 @@ class SettingsActivity : ThemedActivity() {
 
     private fun refresh() {
         val has = Tools.cookiesFile(this).exists()
-        cookieInfo.text = if (has) "Saved on this phone. Kept private." else "None saved."
+        cookieInfo.text = if (has) getString(R.string.set_cookies_saved) else getString(R.string.set_cookies_none)
         remove.isEnabled = has; remove.alpha = if (has) 1f else 0.5f
         update.isEnabled = !updating && !State.busy()
         update.alpha = if (update.isEnabled) 1f else 0.5f
@@ -91,7 +91,7 @@ class SettingsActivity : ThemedActivity() {
         val uri = data?.data ?: return
         val err = Cookies.import(this, uri)
         if (err == null) State.cookiesSaved = true
-        Toast.makeText(this, err ?: "Cookies imported.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, err ?: getString(R.string.common_cookies_imported), Toast.LENGTH_LONG).show()
         refresh()
     }
 
@@ -99,7 +99,7 @@ class SettingsActivity : ThemedActivity() {
     private fun updateTools() {
         if (updating) return
         updating = true; refresh()
-        version.text = "Updating yt-dlp…"
+        version.text = getString(R.string.set_updating)
         thread {
             val msg = Tools.update(this).message
             runOnUiThread { updating = false; version.text = msg; refresh() }

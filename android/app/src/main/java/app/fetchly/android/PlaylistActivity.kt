@@ -62,12 +62,12 @@ class PlaylistActivity : ThemedActivity() {
         val link = intent.getStringExtra("url")
         if (link != null && savedInstanceState == null) {
             val busy = Pl.items.any { it.open }
-            if (busy && link != Pl.url) Toast.makeText(this, "A playlist is still downloading. Wait for it, or cancel it first.", Toast.LENGTH_LONG).show()
+            if (busy && link != Pl.url) Toast.makeText(this, getString(R.string.pl_busy), Toast.LENGTH_LONG).show()
             else if (link != Pl.url || Pl.error != null) Pl.load(this, link)
             else if (!busy) Pl.items = emptyList()
         }
         if (Pl.url.isEmpty()) { finish(); return }
-        val options = Quality.playlistOptions()
+        val options = Quality.playlistOptions(this)
         option = options.firstOrNull { it.key == Quality.remembered(this) } ?: options[0]
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -81,7 +81,7 @@ class PlaylistActivity : ThemedActivity() {
             }
             ins
         }
-        root.add(topBar("Playlist"))
+        root.add(topBar(getString(R.string.pl_title)))
         head = label("", 17f, bold = true).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
         sub = label("", 13f, R.color.muted)
         root.add(head, 12); root.add(sub, 2)
@@ -94,33 +94,33 @@ class PlaylistActivity : ThemedActivity() {
         root.add(spin, 28, dp(28), dp(28))
         note = label("", 15f)
         root.add(note, 12)
-        retry = button("Try again", Kind.TONAL) { Pl.load(this, Pl.url); render() }
+        retry = button(getString(R.string.pl_try_again), Kind.TONAL) { Pl.load(this, Pl.url); render() }
         root.add(retry, 12)
 
         // Step 1: choose videos.
         pickTop = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val search = field("Search titles", InputType.TYPE_CLASS_TEXT)
+        val search = field(getString(R.string.pl_search_hint), InputType.TYPE_CLASS_TEXT)
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: Editable?) { filter = s.toString(); shown = pageSize; refilter(); render() }
         })
         pickTop.add(search, 10, -1, dp(44))
-        val range = field("Range, e.g. 5-20", InputType.TYPE_CLASS_TEXT)
+        val range = field(getString(R.string.pl_range_hint), InputType.TYPE_CLASS_TEXT)
         val line1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         line1.addView(range, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(8) })
-        line1.addView(small("Select range") {
+        line1.addView(small(getString(R.string.pl_select_range)) {
             val picked = parseRange(range.text.toString())
-            if (picked == null) Toast.makeText(this, "Type a range like 5-20 or 1-3, 8.", Toast.LENGTH_SHORT).show()
+            if (picked == null) Toast.makeText(this, getString(R.string.pl_range_bad), Toast.LENGTH_SHORT).show()
             else { Pl.selected.clear(); Pl.selected.addAll(picked); render() }
         }, LinearLayout.LayoutParams(-2, dp(40)))
         pickTop.add(line1, 8)
         val line2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun third(text: String, end: Int, f: (Int) -> Unit) = line2.addView(small(text) { rows.forEach { f(it.n) }; render() },
             LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(end) })
-        third("All", 8) { Pl.selected.add(it) }
-        third("None", 8) { Pl.selected.remove(it) }
-        third("Invert", 0) { if (!Pl.selected.remove(it)) Pl.selected.add(it) }
+        third(getString(R.string.pl_all), 8) { Pl.selected.add(it) }
+        third(getString(R.string.pl_none), 8) { Pl.selected.remove(it) }
+        third(getString(R.string.pl_invert), 0) { if (!Pl.selected.remove(it)) Pl.selected.add(it) }
         pickTop.add(line2, 8)
         root.add(pickTop)
 
@@ -134,7 +134,7 @@ class PlaylistActivity : ThemedActivity() {
         root.add(queueTop, 12)
 
         list = ListView(this).apply { divider = null; isVerticalScrollBarEnabled = true }
-        more = small("Load more") { shown += pageSize; render() }
+        more = small(getString(R.string.pl_load_more)) { shown += pageSize; render() }
         list.addFooterView(LinearLayout(this).apply {
             setPadding(0, dp(8), 0, dp(8)); addView(more, LinearLayout.LayoutParams(-1, dp(40)))
         }, null, false)
@@ -150,7 +150,7 @@ class PlaylistActivity : ThemedActivity() {
         pickFoot.add(count, 8)
         qualityBtn = button("", Kind.TONAL, 44) { chooseQuality(options) }
         pickFoot.add(qualityBtn, 8, -1, dp(44))
-        start = button("Download", Kind.PRIMARY, 52) { startQueue() }
+        start = button(getString(R.string.common_download), Kind.PRIMARY, 52) { startQueue() }
         pickFoot.add(start, 8, -1, dp(52))
         root.add(pickFoot)
 
@@ -205,12 +205,12 @@ class PlaylistActivity : ThemedActivity() {
             show(pickTop, now == "pick"); show(pickFoot, now == "pick"); show(queueTop, now == "queue")
             show(list, now == "pick" || now == "queue")
         }
-        head.text = Pl.title.ifEmpty { "Playlist" }
-        sub.text = if (Pl.entries.isEmpty()) "" else "${Pl.entries.size} videos" +
-            if (Pl.capped) " · Mix playlists never end, so only the first ${Pl.MIX_CAP} are listed" else ""
+        head.text = Pl.title.ifEmpty { getString(R.string.pl_title) }
+        sub.text = if (Pl.entries.isEmpty()) "" else getString(R.string.pl_n_videos, Pl.entries.size) +
+            if (Pl.capped) " · " + getString(R.string.pl_mix_capped, Pl.MIX_CAP) else ""
         show(sub, sub.text.isNotEmpty())
         when (now) {
-            "wait" -> note.text = "Fetching playlist…"
+            "wait" -> note.text = getString(R.string.pl_fetching)
             "error" -> note.text = Pl.error
             "pick" -> drawPick()
             "queue" -> drawQueue()
@@ -221,19 +221,20 @@ class PlaylistActivity : ThemedActivity() {
     private fun drawPick() {
         val left = rows.size - minOf(rows.size, shown)
         show(more, left > 0)
-        more.text = "Load more ($left left)"
+        more.text = getString(R.string.pl_load_more_left, left)
         val picked = Pl.entries.filter { it.n in Pl.selected }
         val real = picked.filter { it.unavailable == null && !it.have }
         val timed = real.filter { it.duration > 0 }
         val size = if (timed.isEmpty()) "" else {
             val seconds = timed.sumOf { it.duration.toLong() } * real.size / timed.size
-            " · about " + Quality.size(seconds * (kbps[option.key] ?: 4500) * 125)
+            " · " + getString(R.string.pl_about, Quality.size(seconds * (kbps[option.key] ?: 4500) * 125))
         }
-        count.text = "${picked.size} of ${Pl.entries.size} selected$size"
-        qualityBtn.text = "Quality for all: ${option.label}"
+        count.text = getString(R.string.pl_selected, picked.size, Pl.entries.size) + size
+        qualityBtn.text = getString(R.string.pl_quality_for_all, option.label)
         start.isEnabled = picked.isNotEmpty()
         start.alpha = if (start.isEnabled) 1f else 0.5f
-        start.text = if (picked.isEmpty()) "Select videos to download" else "Download ${picked.size} video${if (picked.size == 1) "" else "s"}"
+        start.text = if (picked.isEmpty()) getString(R.string.pl_select_to_download)
+            else if (picked.size == 1) getString(R.string.pl_download_one) else getString(R.string.pl_download_n, picked.size)
     }
 
     private fun drawQueue() {
@@ -246,10 +247,10 @@ class PlaylistActivity : ThemedActivity() {
         val paused = n(PlItem.S.PAUSED)
         val failed = n(PlItem.S.FAILED)
         qBar.progress = ((items.size - open) * 100 + items.filter { it.open }.sumOf { it.percent }) / items.size.coerceAtLeast(1)
-        qStage.text = when { finished -> "Finished"; running -> "Downloading · ${items.size - open} of ${items.size} finished"; else -> "Paused" }
+        qStage.text = when { finished -> getString(R.string.pl_finished); running -> getString(R.string.pl_progress, items.size - open, items.size); else -> getString(R.string.pl_paused) }
         val cancelled = n(PlItem.S.CANCELLED)
-        qCounts.text = "${n(PlItem.S.DONE)} done · $failed failed · ${n(PlItem.S.SKIPPED)} skipped" +
-            (if (cancelled > 0) " · $cancelled cancelled" else "") + "\nSaved in Downloads/${Pl.folder()}"
+        qCounts.text = getString(R.string.pl_counts, n(PlItem.S.DONE), failed, n(PlItem.S.SKIPPED)) +
+            (if (cancelled > 0) " · " + getString(R.string.pl_cancelled_n, cancelled) else "") + "\n" + getString(R.string.pl_saved_in, Pl.folder())
 
         val key = "$finished|$running|${paused > 0}|${failed > 0}"
         if (key == buttonsKey) return
@@ -257,21 +258,21 @@ class PlaylistActivity : ThemedActivity() {
         qButtons.removeAllViews()
         fun add(text: String, onClick: () -> Unit) = qButtons.addView(small(text, onClick),
             LinearLayout.LayoutParams(0, dp(40), 1f).apply { if (qButtons.childCount > 0) marginStart = dp(8) })
-        if (running) add("Pause all") { PlaylistService.send(this, "pause") }
-        if (paused > 0) add("Resume all") { PlaylistService.send(this, "resume") }
-        if (!finished) add("Cancel all") { PlaylistService.send(this, "cancel") }
-        if (finished) add("Open folder") { openFolder() }
-        if (failed > 0 && !running) add("Retry failed") { PlaylistService.send(this, "retry") }
-        if (finished) add("Back to list") { Pl.items = emptyList(); render() }
+        if (running) add(getString(R.string.pl_pause_all)) { PlaylistService.send(this, "pause") }
+        if (paused > 0) add(getString(R.string.pl_resume_all)) { PlaylistService.send(this, "resume") }
+        if (!finished) add(getString(R.string.pl_cancel_all)) { PlaylistService.send(this, "cancel") }
+        if (finished) add(getString(R.string.pl_open_folder)) { openFolder() }
+        if (failed > 0 && !running) add(getString(R.string.pl_retry_failed)) { PlaylistService.send(this, "retry") }
+        if (finished) add(getString(R.string.pl_back_to_list)) { Pl.items = emptyList(); render() }
     }
 
     private fun itemMenu(item: PlItem) {
         val s = item.state
         val actions = ArrayList<Pair<String, String>>()
-        if (s == PlItem.S.QUEUED || s == PlItem.S.STARTING || s == PlItem.S.DOWNLOADING) actions.add("Pause" to "pause")
-        if (s == PlItem.S.PAUSED) actions.add("Resume" to "resume")
-        if (s == PlItem.S.QUEUED || s == PlItem.S.STARTING || s == PlItem.S.DOWNLOADING || s == PlItem.S.PAUSED) actions.add("Cancel" to "cancel")
-        if (s == PlItem.S.FAILED || s == PlItem.S.CANCELLED) actions.add("Retry" to "retry")
+        if (s == PlItem.S.QUEUED || s == PlItem.S.STARTING || s == PlItem.S.DOWNLOADING) actions.add(getString(R.string.pl_pause) to "pause")
+        if (s == PlItem.S.PAUSED) actions.add(getString(R.string.pl_resume) to "resume")
+        if (s == PlItem.S.QUEUED || s == PlItem.S.STARTING || s == PlItem.S.DOWNLOADING || s == PlItem.S.PAUSED) actions.add(getString(R.string.common_cancel) to "cancel")
+        if (s == PlItem.S.FAILED || s == PlItem.S.CANCELLED) actions.add(getString(R.string.common_retry) to "retry")
         if (actions.isEmpty()) { item.error?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }; return }
         AlertDialog.Builder(this).setTitle(item.e.title)
             .setItems(actions.map { it.first }.toTypedArray()) { _, i -> PlaylistService.send(this, actions[i].second, item.e.n) }
@@ -279,7 +280,7 @@ class PlaylistActivity : ThemedActivity() {
     }
 
     private fun chooseQuality(options: List<QOption>) {
-        AlertDialog.Builder(this).setTitle("Quality for all videos")
+        AlertDialog.Builder(this).setTitle(getString(R.string.pl_quality_all_title))
             .setSingleChoiceItems(options.map { it.label }.toTypedArray(), options.indexOf(option)) { d, i ->
                 option = options[i]; Quality.remember(this, option.key); d.dismiss(); render()
             }.show()
@@ -301,7 +302,7 @@ class PlaylistActivity : ThemedActivity() {
             startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, DocumentsContract.Document.MIME_TYPE_DIR))
         } catch (_: Exception) {
             try { startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) }
-            catch (_: Exception) { Toast.makeText(this, "Open the Files app, then Downloads/${Pl.folder()}.", Toast.LENGTH_LONG).show() }
+            catch (_: Exception) { Toast.makeText(this, getString(R.string.pl_open_files_hint, Pl.folder()), Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -353,23 +354,23 @@ class PlaylistActivity : ThemedActivity() {
             if (item == null) {
                 row.box.isChecked = e.n in Pl.selected
                 row.dur.text = time(e.duration)
-                val why = e.unavailable ?: if (e.have) "Already downloaded" else null
-                row.sub.text = if (why != null) "$why · will be skipped" else ""
+                val why = e.unavailable ?: if (e.have) getString(R.string.pl_already) else null
+                row.sub.text = if (why != null) getString(R.string.pl_will_skip, why) else ""
                 row.view.alpha = if (why != null) 0.6f else 1f
                 show(row.bar, false)
             } else {
                 row.view.alpha = 1f
                 val s = item.state
                 row.sub.text = when (s) {
-                    PlItem.S.QUEUED -> "Waiting"
-                    PlItem.S.STARTING -> "Starting…"
+                    PlItem.S.QUEUED -> getString(R.string.pl_st_waiting)
+                    PlItem.S.STARTING -> getString(R.string.common_starting)
                     PlItem.S.DOWNLOADING -> "${item.percent}%"
-                    PlItem.S.PROCESSING -> "Finishing up…"
-                    PlItem.S.PAUSED -> if (item.percent > 0) "Paused at ${item.percent}% · tap to resume" else "Paused · tap to resume"
-                    PlItem.S.DONE -> "Done"
-                    PlItem.S.FAILED -> "Failed: ${item.error ?: "unknown error"} · tap to retry"
-                    PlItem.S.SKIPPED -> "Skipped: ${item.error ?: "not available"}"
-                    PlItem.S.CANCELLED -> "Cancelled · tap to retry"
+                    PlItem.S.PROCESSING -> getString(R.string.common_finishing)
+                    PlItem.S.PAUSED -> if (item.percent > 0) getString(R.string.pl_st_paused_at, item.percent) else getString(R.string.pl_st_paused)
+                    PlItem.S.DONE -> getString(R.string.common_done)
+                    PlItem.S.FAILED -> getString(R.string.pl_st_failed, item.error ?: getString(R.string.pl_st_unknown_error))
+                    PlItem.S.SKIPPED -> getString(R.string.pl_st_skipped, item.error ?: getString(R.string.pl_st_not_available))
+                    PlItem.S.CANCELLED -> getString(R.string.pl_st_cancelled)
                 }
                 color = when (s) { PlItem.S.DONE -> R.color.ok_text; PlItem.S.FAILED -> R.color.err_text; PlItem.S.SKIPPED -> R.color.tip_text; else -> R.color.muted }
                 show(row.bar, s == PlItem.S.STARTING || s == PlItem.S.DOWNLOADING || s == PlItem.S.PROCESSING || s == PlItem.S.PAUSED)

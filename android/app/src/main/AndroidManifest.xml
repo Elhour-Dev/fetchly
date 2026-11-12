@@ -12,6 +12,7 @@
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:label="Fetchy"
+        android:supportsRtl="true"
         android:extractNativeLibs="true"
         android:theme="@style/AppTheme">
 

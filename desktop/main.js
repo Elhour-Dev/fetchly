@@ -1,6 +1,7 @@
 // Electron wrapper for Fetchy: starts the bundled Python server and shows it in a window.
 const { app, BrowserWindow, dialog, shell, ipcMain, nativeTheme, session, net: electronNet } = require('electron');
 const { findUpdate } = require('./update');
+const { youtubeLogin } = require('./login');
 const { spawn, execFile } = require('child_process');
 const fs = require('fs'), path = require('path'), net = require('net'), http = require('http');
 
@@ -154,7 +155,9 @@ async function start() {
   win = new BrowserWindow({
     width: 1100, height: 800, title: 'Fetchy', autoHideMenuBar: true, show: false,
     icon: path.join(__dirname, 'assets', 'icon.ico'),
+    webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
+  ipcMain.handle('youtube-login', () => youtubeLogin(win));
   win.setMenuBarVisibility(false);
   const origin = `http://127.0.0.1:${port}`;
   win.webContents.setWindowOpenHandler(({ url }) => { openWeb(url); return { action: 'deny' }; });
