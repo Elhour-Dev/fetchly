@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 APP_NAME = "Fetchy"
-APP_VERSION = "1.3.5"   # keep equal to desktop/package.json and the git tag
+APP_VERSION = "1.4.0"   # keep equal to desktop/package.json and the git tag
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
